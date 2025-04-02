@@ -19,11 +19,14 @@
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "inspector": "npm run prepare && npx @modelcontextprotocol/inspector build/index.js",
+    "test": "npm run lint && npm run format:check && npm run test:unit",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,json,md}\"",
-    "test": "npm run lint && npm run format:check"
+    "format:check": "prettier --check \"**/*.{ts,json,md}\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
@@ -39,6 +42,7 @@
     "@eslint/js": "^9.23.0",
     "@types/express": "^5.0.0",
     "@types/node": "^20.11.24",
+    "@vitest/coverage-v8": "^3.1.1",
     "eslint": "^9.23.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.5",
@@ -47,6 +51,7 @@
     "prettier": "^3.5.3",
     "tsx": "^4.19.2",
     "typescript": "^5.3.3",
-    "typescript-eslint": "^8.28.0"
+    "typescript-eslint": "^8.28.0",
+    "vitest": "^3.1.1"
   }
 }
