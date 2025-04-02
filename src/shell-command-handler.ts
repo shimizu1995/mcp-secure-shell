@@ -1,5 +1,5 @@
 import { execa } from 'execa';
-import commandExists from 'command-exists';
+import { sync as commandExistsSync } from 'command-exists';
 
 // ホワイトリストに登録されたコマンドのみ実行を許可する
 const WHITELISTED_COMMANDS = new Set([
@@ -88,7 +88,8 @@ export async function handleShellCommand(command: string): Promise<HandlerReturn
     const baseCommand = command.trim().split(/\s+/)[0];
 
     // コマンドが存在するか確認
-    if (!(await commandExists(baseCommand))) {
+    const isCommandExists = await commandExistsSync(baseCommand);
+    if (!isCommandExists) {
       throw new Error(`Command not found: ${baseCommand}`);
     }
 
