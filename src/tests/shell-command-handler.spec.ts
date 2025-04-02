@@ -61,6 +61,29 @@ describe('handleShellCommand', () => {
     expect(commandExists).toHaveBeenCalledWith('nonexistent-command');
   });
 
+  it('should specifically handle non-existent command "ssss"', async () => {
+    // Override the mock to return false for this test case (command doesn't exist)
+    vi.mocked(commandExists).mockImplementation(() => Promise.resolve(false));
+
+    const result = await handleShellCommand('ssss');
+
+    // Verify the exact error message for the 'ssss' command
+    expect(result.content[0].text).toContain('Command not found: ssss');
+    expect(commandExists).toHaveBeenCalledWith('ssss');
+  });
+
+  it('should handle command with arguments correctly when command does not exist', async () => {
+    // Override the mock to return false for this test case (command doesn't exist)
+    vi.mocked(commandExists).mockImplementation(() => Promise.resolve(false));
+
+    const result = await handleShellCommand('ssss -a -b --option=value');
+
+    // Verify it only checks the base command existence
+    expect(result.content[0].text).toContain('Command not found: ssss');
+    expect(commandExists).toHaveBeenCalledWith('ssss');
+    expect(commandExists).not.toHaveBeenCalledWith('ssss -a -b --option=value');
+  });
+
   it('should return an error for non-whitelisted commands', async () => {
     // Override the mock to return true for this test case
     vi.mocked(commandExists).mockImplementation(() => Promise.resolve(true));
@@ -85,5 +108,15 @@ describe('handleShellCommand', () => {
     expect(result.content[0]).toHaveProperty('mimeType', 'text/plain');
     // The exact error message will depend on the OS, but should contain some error text
     expect(result.content[0].text).toBeTruthy();
+  });
+
+  it('should trim whitespace from commands for proper validation', async () => {
+    // Override the mock to return true for this test case
+    vi.mocked(commandExists).mockImplementation(() => Promise.resolve(true));
+
+    await handleShellCommand('  echo  "test with spaces"  ');
+
+    // Verify the command was properly trimmed
+    expect(commandExists).toHaveBeenCalledWith('echo');
   });
 });
