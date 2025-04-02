@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { execa } from 'execa';
 import commandExists from 'command-exists';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 // ホワイトリストに登録されたコマンドのみ実行を許可する
 const WHITELISTED_COMMANDS = new Set([
@@ -88,68 +88,44 @@ export const createMcpServer = async () => {
     console.error('[MCP Error]', error);
   };
 
-  mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      {
-        name: 'run_command',
-        description: 'Run a shell command',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            command: { type: 'string' },
-          },
-        },
-      },
-    ],
-  }));
+  mcpServer.tool(
+    'run_command',
+    'Run a shell command',
+    { command: z.string() },
+    async ({ command }) => {
+      try {
+        const baseCommand = command.trim().split(/\s+/)[0];
+        if (!(await commandExists(baseCommand))) {
+          throw new Error(`Command not found: ${baseCommand}`);
+        }
 
-  mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (request.params.name !== 'run_command') {
-      throw new Error(`Unknown tool: ${request.params.name}`);
-    }
-    if (typeof request.params.arguments !== 'object') {
-      throw new Error(`Invalid arguments: ${request.params.arguments}`);
-    }
-    if (typeof request.params.arguments.command !== 'string') {
-      throw new Error(`Invalid command: ${request.params.arguments.command}`);
-    }
-    if (request.params.arguments.command.length === 0) {
-      throw new Error(`Command is empty`);
-    }
+        if (!validateCommand(baseCommand)) {
+          throw new Error(`Command not allowed: ${baseCommand}`);
+        }
 
-    const command = request.params.arguments?.command as string;
-    try {
-      const baseCommand = command.trim().split(/\s+/)[0];
-      if (!(await commandExists(baseCommand))) {
-        throw new Error(`Command not found: ${baseCommand}`);
+        // コマンド実行
+        const result = await execa({
+          env: process.env,
+          shell: true,
+          all: true,
+        })`${command}`;
+
+        return {
+          content: [{ type: 'text', text: result.all, mimeType: 'text/plain' }],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: String(error),
+              mimeType: 'text/plain',
+            },
+          ],
+        };
       }
-
-      if (!validateCommand(baseCommand)) {
-        throw new Error(`Command not allowed: ${baseCommand}`);
-      }
-
-      // コマンド実行
-      const result = await execa({
-        env: process.env,
-        shell: true,
-        all: true,
-      })`${command}`;
-
-      return {
-        content: [{ type: 'text', text: result.all, mimeType: 'text/plain' }],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: String(error),
-            mimeType: 'text/plain',
-          },
-        ],
-      };
     }
-  });
+  );
 
   async function cleanup() {
     try {
