@@ -28,41 +28,14 @@ const WHITELISTED_COMMANDS = new Set([
   'stat',
   'wc',
 
-  // アーカイブコマンド
-  'tar',
-  'gzip',
-  'gunzip',
-  'zip',
-  'unzip',
-
-  // ネットワークコマンド
-  'ping',
-  'curl',
-  'wget',
-  'netstat',
-  'ssh',
-  'scp',
-
-  // プロセス関連コマンド
-  'ps',
-  'top',
-  'htop',
-
   // その他の一般的なコマンド
   'echo',
   'date',
   'cal',
-  'env',
-  'history',
 
   // 開発関連コマンド
   'git',
   'npm',
-  'node',
-  'python',
-  'pip',
-  'go',
-  'cargo',
 ]);
 
 // Dangerous commands that should never be allowed
@@ -103,6 +76,9 @@ const BLACKLISTED_COMMANDS = [
 
   // for unit test
   'black-command-for-test', // Dummy command for testing
+
+  'install', // Could be used to install malicious software
+  'brew',
 ];
 
 /**
