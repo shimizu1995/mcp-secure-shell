@@ -20,9 +20,17 @@ export const createMcpServer = async () => {
 
   mcpServer.tool(
     'run_command',
-    'Run a shell command',
-    { command: z.string() },
-    async ({ command }) => await handleShellCommand(command)
+    'Run a shell command in a specified directory. Commands are executed in the last specified directory until a new one is provided. Only directories within allowed paths can be specified.',
+    {
+      command: z.string(),
+      directory: z
+        .string()
+        .optional()
+        .describe(
+          'Working directory to execute the command in. Must be within allowed directories.'
+        ),
+    },
+    async ({ command, directory }) => await handleShellCommand(command, directory)
   );
 
   async function cleanup() {

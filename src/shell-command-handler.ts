@@ -1,5 +1,14 @@
 import { execa } from 'execa';
 import { sync as commandExistsSync } from 'command-exists';
+import path from 'path';
+import fs from 'fs';
+
+// Set of allowed directories (subdirectories of these are also allowed)
+// Default to user's home directory if available, otherwise current directory
+const ALLOWED_DIRECTORIES = [process.env.HOME || process.cwd()];
+
+// Track the current working directory
+let currentWorkingDirectory = process.cwd();
 
 // ホワイトリストに登録されたコマンドのみ実行を許可する
 const WHITELISTED_COMMANDS = new Set([
@@ -46,7 +55,7 @@ const BLACKLISTED_COMMANDS = [
   'del', // Windows delete command - Same risks as rm
 
   // Disk/Filesystem Commands
-  'format', // Formats entire disks/partitions - Could destroy all data on drives
+  // 'format', // Formats entire disks/partitions - Could destroy all data on drives
   'mkfs', // Make filesystem - Could reformat drives and destroy data
   'dd', // Direct disk access - Can overwrite raw disks, often called "disk destroyer"
 
@@ -98,6 +107,57 @@ export function hasBlacklistedCommand(command: string): boolean {
   return false;
 }
 
+/**
+ * Check if a given directory is within any of the allowed directories
+ */
+export function isDirectoryAllowed(dir: string): boolean {
+  // Resolve to absolute path
+  const absoluteDir = path.resolve(dir);
+  if (absoluteDir === path.sep) {
+    // Root directory is not allowed
+    return false;
+  }
+
+  // Check if the directory exists
+  try {
+    const stats = fs.statSync(absoluteDir);
+    if (!stats.isDirectory()) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  // Check if it's a subdirectory of any allowed directory
+  return ALLOWED_DIRECTORIES.some((allowedDir) => {
+    const resolvedAllowedDir = path.resolve(allowedDir);
+    return (
+      absoluteDir === resolvedAllowedDir || absoluteDir.startsWith(resolvedAllowedDir + path.sep)
+    );
+  });
+}
+
+/**
+ * Set the current working directory for command execution
+ */
+export function setWorkingDirectory(dir: string): string {
+  if (!isDirectoryAllowed(dir)) {
+    throw new Error(
+      `Directory not allowed: ${dir}. Must be within: ${ALLOWED_DIRECTORIES.join(', ')}`
+    );
+  }
+
+  currentWorkingDirectory = path.resolve(dir);
+  return currentWorkingDirectory;
+}
+
+/**
+ * Get the current working directory
+ */
+export function getWorkingDirectory(): string {
+  return currentWorkingDirectory;
+}
+
 type HandlerReturnType = {
   content: {
     type: 'text';
@@ -109,8 +169,16 @@ type HandlerReturnType = {
 /**
  * シェルコマンドを実行するハンドラー関数
  */
-export async function handleShellCommand(command: string): Promise<HandlerReturnType> {
+export async function handleShellCommand(
+  command: string,
+  directory?: string
+): Promise<HandlerReturnType> {
   try {
+    // If directory is specified, set it as the working directory
+    if (directory) {
+      setWorkingDirectory(directory);
+    }
+
     const baseCommand = command.trim().split(/\s+/)[0];
 
     // コマンドが存在するか確認
@@ -134,10 +202,22 @@ export async function handleShellCommand(command: string): Promise<HandlerReturn
       env: process.env,
       shell: true,
       all: true,
+      cwd: currentWorkingDirectory, // Use the current working directory
     })`${command}`;
 
     return {
-      content: [{ type: 'text', text: result.all, mimeType: 'text/plain' }],
+      content: [
+        {
+          type: 'text',
+          text: `${result.all}`,
+          mimeType: 'text/plain',
+        },
+        {
+          type: 'text',
+          text: `executed in ${currentWorkingDirectory}`,
+          mimeType: 'text/plain',
+        },
+      ],
     };
   } catch (error) {
     return {

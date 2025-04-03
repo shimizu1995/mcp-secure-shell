@@ -1,9 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   handleShellCommand,
   validateCommand,
   hasBlacklistedCommand,
+  isDirectoryAllowed,
+  setWorkingDirectory,
+  getWorkingDirectory,
 } from '../shell-command-handler.js';
+import fs from 'fs';
+import path from 'path';
 
 // Do not mock the command-exists library to use the actual implementation
 
@@ -28,7 +33,7 @@ describe('hasBlacklistedCommand', () => {
     expect(hasBlacklistedCommand('black-command-for-test -rf /')).toBe(true);
     expect(hasBlacklistedCommand('echo hello | black-command-for-test bash')).toBe(true);
     expect(hasBlacklistedCommand('cat file | grep pattern | black-command-for-test')).toBe(true);
-    expect(hasBlacklistedCommand('find . -exec black-command-for-test 777 {} \;')).toBe(true);
+    expect(hasBlacklistedCommand('find . -exec black-command-for-test 777 {} ;')).toBe(true);
   });
 
   it('should return true even if blacklisted command is not the base command', () => {
@@ -138,5 +143,139 @@ describe('handleShellCommand', () => {
     // Verify the correct error message is returned (blacklist error, not whitelist error)
     expect(result.content[0].text).toContain('Command not found: black-command-for-test');
     expect(result.content[0].text).not.toContain('Command not allowed');
+  });
+});
+
+describe('Directory Management', () => {
+  // Real allowed directories pattern to test against
+  const homeDir = process.env.HOME || process.cwd();
+  const testDir = path.join(homeDir, 'test-dir');
+  const testFile = path.join(homeDir, 'test-file.txt');
+
+  beforeEach(() => {
+    // Create test directory and file if they don't exist
+    if (!fs.existsSync(testDir)) {
+      try {
+        fs.mkdirSync(testDir, { recursive: true });
+      } catch {
+        // Ignore errors - tests will handle this
+      }
+    }
+
+    // Reset working directory to home directory
+    setWorkingDirectory(homeDir);
+
+    // Create test file if it doesn't exist
+    if (!fs.existsSync(testFile)) {
+      try {
+        fs.writeFileSync(testFile, 'test content', 'utf8');
+      } catch {
+        // Ignore errors - tests will handle this
+      }
+    }
+  });
+
+  it('should validate if a directory is allowed', () => {
+    // Home directory and subdirectories should be allowed
+    expect(isDirectoryAllowed(homeDir)).toBe(true);
+    expect(isDirectoryAllowed(testDir)).toBe(true);
+
+    // Directories outside home should not be allowed
+    const outsideDir = path.join('/', 'tmp', 'test-outside');
+    expect(isDirectoryAllowed(outsideDir)).toBe(false);
+
+    // Non-directories should not be allowed
+    if (fs.existsSync(testFile)) {
+      expect(isDirectoryAllowed(testFile)).toBe(false);
+    }
+
+    // Non-existent directories should not be allowed
+    const nonExistentDir = path.join(homeDir, 'non-existent-dir-' + Date.now());
+    expect(isDirectoryAllowed(nonExistentDir)).toBe(false);
+  });
+
+  it('should set and get working directory', () => {
+    // Set to a valid directory
+    const result = setWorkingDirectory(testDir);
+    expect(result).toBe(testDir);
+    expect(getWorkingDirectory()).toBe(testDir);
+
+    // Set back to home directory
+    const result2 = setWorkingDirectory(homeDir);
+    expect(result2).toBe(homeDir);
+    expect(getWorkingDirectory()).toBe(homeDir);
+  });
+
+  it('should throw an error when setting an invalid directory', () => {
+    // Try to set to a directory outside allowed directories
+    const outsideDir = path.join('/', 'tmp', 'test-outside');
+    expect(() => setWorkingDirectory(outsideDir)).toThrow(/Directory not allowed/);
+
+    // Try to set to a non-existent directory
+    const nonExistentDir = path.join(homeDir, 'non-existent-dir-' + Date.now());
+    expect(() => setWorkingDirectory(nonExistentDir)).toThrow();
+
+    // Try to set to a file (which is not a directory)
+    if (fs.existsSync(testFile)) {
+      expect(() => setWorkingDirectory(testFile)).toThrow();
+    }
+  });
+});
+
+describe('handleShellCommand with Directory Parameter', () => {
+  const homeDir = process.env.HOME || process.cwd();
+  const testDir = path.join(homeDir, 'test-dir');
+
+  beforeEach(() => {
+    // Create test directory if it doesn't exist
+    if (!fs.existsSync(testDir)) {
+      try {
+        fs.mkdirSync(testDir, { recursive: true });
+      } catch {
+        // Ignore errors - tests will handle this
+      }
+    }
+
+    // Reset working directory to home directory
+    setWorkingDirectory(homeDir);
+  });
+
+  it('should execute a command in the specified directory', async () => {
+    // Execute pwd in the test directory
+    const result = await handleShellCommand('pwd', testDir);
+
+    // Verify the command was executed in the test directory
+    expect(result.content[0].text).toContain(testDir);
+
+    // Verify the working directory was updated
+    expect(getWorkingDirectory()).toBe(testDir);
+  });
+
+  it('should use the last specified directory for subsequent commands', async () => {
+    // First, set a working directory
+    await handleShellCommand('pwd', testDir);
+
+    // Then run a command without specifying a directory
+    const result = await handleShellCommand('pwd');
+
+    // Verify it still uses the previously set directory
+    expect(result.content[0].text).toContain(testDir);
+  });
+
+  it('should throw an error when specifying an invalid directory', async () => {
+    // Try to execute in an invalid directory
+    const outsideDir = path.join('/', 'tmp', 'test-outside');
+    const result = await handleShellCommand('pwd', outsideDir);
+
+    // Verify error is returned
+    expect(result.content[0].text).toContain('Directory not allowed');
+  });
+
+  it('should throw an error when specifying root directory', async () => {
+    // Try to execute in the root directory
+    const result = await handleShellCommand('pwd', '/');
+
+    // Verify error is returned
+    expect(result.content[0].text).toContain('Directory not allowed');
   });
 });
