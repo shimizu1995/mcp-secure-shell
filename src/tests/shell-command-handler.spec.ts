@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   handleShellCommand,
   validateCommand,
@@ -6,6 +6,8 @@ import {
   isDirectoryAllowed,
   setWorkingDirectory,
   getWorkingDirectory,
+  parseAllowedDirectories,
+  refreshAllowedDirectories,
 } from '../shell-command-handler.js';
 import fs from 'fs';
 import path from 'path';
@@ -153,6 +155,9 @@ describe('Directory Management', () => {
   const testFile = path.join(homeDir, 'test-file.txt');
 
   beforeEach(() => {
+    // Set up allowed directories for testing
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', homeDir);
+    refreshAllowedDirectories();
     // Create test directory and file if they don't exist
     if (!fs.existsSync(testDir)) {
       try {
@@ -222,11 +227,65 @@ describe('Directory Management', () => {
   });
 });
 
+// ALLOWED_DIRECTORIESの環境変数からの読み込みテスト
+describe('parseAllowedDirectories', () => {
+  // 環境変数のモックを管理するために、afterEachフックを追加
+  afterEach(() => {
+    // 環境変数のモックをリセット
+    vi.unstubAllEnvs();
+  });
+
+  // 各テスト後に環境変数の変更をALLOWED_DIRECTORIESに反映させる
+  beforeEach(() => {
+    // 現在の環境変数を保存
+    refreshAllowedDirectories();
+  });
+
+  it('should return empty array when environment variable is not set', () => {
+    // 環境変数が存在しない場合
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', undefined);
+    expect(parseAllowedDirectories()).toEqual([]);
+  });
+
+  it('should return empty array when environment variable is empty', () => {
+    // 環境変数が空文字列の場合
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', '');
+    expect(parseAllowedDirectories()).toEqual([]);
+  });
+
+  it('should parse colon-separated directories', () => {
+    // 標準的なケース: コロン区切りのディレクトリリスト
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', '/home/user:/tmp:/var/log');
+    expect(parseAllowedDirectories()).toEqual(['/home/user', '/tmp', '/var/log']);
+  });
+
+  it('should filter out empty entries', () => {
+    // 空のエントリを含むケース
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', '/home/user::/tmp::/var/log');
+    expect(parseAllowedDirectories()).toEqual(['/home/user', '/tmp', '/var/log']);
+  });
+
+  it('should handle single directory', () => {
+    // ディレクトリが1つだけのケース
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', '/home/user');
+    expect(parseAllowedDirectories()).toEqual(['/home/user']);
+  });
+
+  it('should trim whitespace from directories', () => {
+    // 空白を含むケース
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', ' /home/user : /tmp : /var/log ');
+    expect(parseAllowedDirectories()).toEqual(['/home/user', '/tmp', '/var/log']);
+  });
+});
+
 describe('handleShellCommand with Directory Parameter', () => {
   const homeDir = process.env.HOME || process.cwd();
   const testDir = path.join(homeDir, 'test-dir');
 
   beforeEach(() => {
+    // Set up allowed directories for testing
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', homeDir);
+    refreshAllowedDirectories();
     // Create test directory if it doesn't exist
     if (!fs.existsSync(testDir)) {
       try {

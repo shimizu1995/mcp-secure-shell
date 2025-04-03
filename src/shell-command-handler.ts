@@ -3,9 +3,33 @@ import { sync as commandExistsSync } from 'command-exists';
 import path from 'path';
 import fs from 'fs';
 
+// Parse allowed directories from environment variable
+export function parseAllowedDirectories(): string[] {
+  const allowedDirsEnv = process.env.MCP_ALLOWED_DIRECTORIES;
+  if (!allowedDirsEnv) {
+    return [];
+  }
+  return allowedDirsEnv
+    .split(':')
+    .map((dir) => dir.trim())
+    .filter((dir) => dir.length > 0);
+}
+
 // Set of allowed directories (subdirectories of these are also allowed)
-// Default to user's home directory if available, otherwise current directory
-const ALLOWED_DIRECTORIES = [process.env.HOME || process.cwd()];
+// Read from MCP_ALLOWED_DIRECTORIES environment variable
+// Format: directory1:directory2:directory3
+// If not set, no directories are allowed
+let ALLOWED_DIRECTORIES = parseAllowedDirectories();
+
+// For testing purposes - allows refreshing the allowed directories
+export function refreshAllowedDirectories(): void {
+  ALLOWED_DIRECTORIES = parseAllowedDirectories();
+}
+
+// For testing purposes - gets the current allowed directories
+export function getAllowedDirectories(): string[] {
+  return [...ALLOWED_DIRECTORIES];
+}
 
 // Track the current working directory
 let currentWorkingDirectory = process.cwd();
