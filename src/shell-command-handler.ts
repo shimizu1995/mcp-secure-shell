@@ -220,10 +220,16 @@ export async function handleShellCommand(
   try {
     // If directory is specified, set it as the working directory
     let isSameDirectory = false;
+    let isUsingCdCommand = false;
+
     if (directory) {
       const resolvedDirectory = path.resolve(directory);
       const resolvedCurrentDir = path.resolve(currentWorkingDirectory);
       isSameDirectory = resolvedDirectory === resolvedCurrentDir;
+
+      // Check if the command starts with 'cd'
+      const trimmedCommand = command.trim();
+      isUsingCdCommand = trimmedCommand.startsWith('cd ') || trimmedCommand === 'cd';
 
       // Even if it's the same directory, we still call setWorkingDirectory to validate
       setWorkingDirectory(directory);
@@ -259,8 +265,13 @@ export async function handleShellCommand(
     // Prepare the response message about directory
     const dirMessage = `executed in ${currentWorkingDirectory}`;
     let additionalInfo = '';
+
     if (directory && isSameDirectory) {
       additionalInfo = `\n\n> **Note:** You don't need to specify the same directory as the current one.`;
+    }
+
+    if (directory && isUsingCdCommand) {
+      additionalInfo += `\n\n> **Note:** When specifying a directory with the 'directory' parameter, you don't need to use the 'cd' command. The 'directory' parameter already sets the working directory for the command.`;
     }
 
     return {
