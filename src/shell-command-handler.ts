@@ -110,31 +110,64 @@ function getDenyCommandName(denyCmd: DenyCommand): string {
 }
 
 /**
+ * コマンド導入コマンドのリスト
+ * xargsや-execオプションを持つfindなど、引数として他のコマンドを実行するもの
+ */
+const COMMANDS_THAT_EXECUTE_OTHER_COMMANDS = ['xargs', 'find'];
+
+/**
  * コマンドがブラックリストに含まれているかチェック
  */
 export function findDenyCommandInBlacklist(command: string): DenyCommand | null {
   const config = getConfig();
-  const commands = command.trim().split(/\s+/);
+  const trimmedCommand = command.trim();
 
-  // 各コマンドがブラックリストに含まれているかチェック
-  for (const cmd of commands) {
+  // 正規表現パターンとのマッチングをチェック（コマンド全体を対象）
+  for (const denyCmd of config.denyCommands) {
+    const cmdName = getDenyCommandName(denyCmd);
+    if (isRegexPattern(cmdName)) {
+      const regex = getRegexFromPattern(cmdName);
+      if (regex.test(trimmedCommand)) {
+        return denyCmd;
+      }
+    }
+  }
+
+  // コマンドを実行可能な単位で分割してチェック
+  // パイプやセミコロンで分割された個々のコマンドを処理
+  const commandParts = trimmedCommand.split(/[|;]/);
+
+  for (const part of commandParts) {
+    const trimmedPart = part.trim();
+    if (!trimmedPart) continue;
+
+    // 各部分の基本コマンドを取得（最初の単語）
+    const partWords = trimmedPart.split(/\s+/);
+    const baseCommand = partWords[0];
+
+    // 基本コマンドがブラックリストに含まれているかチェック
     const blacklistedCmd = config.denyCommands.find((denyCmd) => {
       const cmdName = getDenyCommandName(denyCmd);
-      return cmdName === cmd;
+      return !isRegexPattern(cmdName) && cmdName === baseCommand;
     });
 
     if (blacklistedCmd) {
       return blacklistedCmd;
     }
-  }
 
-  // 正規表現パターンとのマッチングをチェック
-  for (const denyCmd of config.denyCommands) {
-    const cmdName = getDenyCommandName(denyCmd);
-    if (isRegexPattern(cmdName)) {
-      const regex = getRegexFromPattern(cmdName);
-      if (regex.test(command)) {
-        return denyCmd;
+    // 他のコマンドを実行するコマンド（xargsなど）の場合、引数もチェック
+    if (COMMANDS_THAT_EXECUTE_OTHER_COMMANDS.includes(baseCommand)) {
+      // 引数として渡されるコマンドがブラックリストに含まれているかチェック
+      for (let i = 1; i < partWords.length; i++) {
+        const arg = partWords[i];
+        const blacklistedArg = config.denyCommands.find((denyCmd) => {
+          const cmdName = getDenyCommandName(denyCmd);
+          return !isRegexPattern(cmdName) && cmdName === arg;
+        });
+
+        if (blacklistedArg) {
+          return blacklistedArg;
+        }
       }
     }
   }
