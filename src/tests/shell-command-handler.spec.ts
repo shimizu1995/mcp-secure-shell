@@ -1,20 +1,44 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { DenyCommand } from '../config/shell-command-config.js';
 import {
   handleShellCommand,
   validateCommand,
-  hasBlacklistedCommand,
+  validateCommandWithArgs,
+  findDenyCommandInBlacklist,
+  getBlacklistErrorMessage,
   isDirectoryAllowed,
   setWorkingDirectory,
   getWorkingDirectory,
   parseAllowedDirectories,
   refreshAllowedDirectories,
+  getAllowedDirectoriesFromConfig,
 } from '../shell-command-handler.js';
+import { getConfig, reloadConfig } from '../config/config-loader.js';
 import fs from 'fs';
 import path from 'path';
 
 // Do not mock the command-exists library to use the actual implementation
 
 // Do not mock execa to test with real command execution
+
+const CONFIG_FOR_TEST = path.join(__dirname, 'mcp-test-config.json');
+process.env.MCP_CONFIG_PATH = CONFIG_FOR_TEST;
+
+// コンフィグの初期化
+describe('Config Initialization', () => {
+  beforeEach(() => {
+    // テスト前にコンフィグを再読み込み
+    reloadConfig();
+  });
+
+  it('should load default config', () => {
+    const config = getConfig();
+    expect(config).toBeDefined();
+    expect(config.allowCommands).toBeDefined();
+    expect(config.denyCommands).toBeDefined();
+    expect(config.defaultErrorMessage).toBeDefined();
+  });
+});
 
 describe('validateCommand', () => {
   it('should return true for whitelisted commands', () => {
@@ -24,44 +48,133 @@ describe('validateCommand', () => {
   });
 
   it('should return false for non-whitelisted commands', () => {
-    expect(validateCommand('black-command-for-test')).toBe(false);
+    expect(validateCommand('nonexistent-command')).toBe(false);
     expect(validateCommand('sudo')).toBe(false);
     expect(validateCommand('malicious-command')).toBe(false);
   });
 });
 
-describe('hasBlacklistedCommand', () => {
-  it('should return true for commands containing blacklisted terms', () => {
-    expect(hasBlacklistedCommand('black-command-for-test -rf /')).toBe(true);
-    expect(hasBlacklistedCommand('echo hello | black-command-for-test bash')).toBe(true);
-    expect(hasBlacklistedCommand('cat file | grep pattern | black-command-for-test')).toBe(true);
-    expect(hasBlacklistedCommand('find . -exec black-command-for-test 777 {} ;')).toBe(true);
+describe('validateCommandWithArgs', () => {
+  it('should validate commands with arguments', () => {
+    expect(validateCommandWithArgs('ls -la')).toBe(true);
+    expect(validateCommandWithArgs('git status')).toBe(true);
   });
 
-  it('should return true even if blacklisted command is not the base command', () => {
-    expect(hasBlacklistedCommand('echo Let me explain how black-command-for-test works')).toBe(
-      true
-    );
-    expect(hasBlacklistedCommand('ls | xargs black-command-for-test')).toBe(true);
-    expect(hasBlacklistedCommand('git commit -m "Fix black-command-for-test issue"')).toBe(true);
+  it('should validate subcommands based on configuration', () => {
+    expect(validateCommandWithArgs('git status')).toBe(true); // 許可されたサブコマンド
+    expect(validateCommandWithArgs('npm run')).toBe(true); // 許可されたサブコマンド
   });
 
-  it('should return false for safe commands with no blacklisted terms', () => {
-    expect(hasBlacklistedCommand('ls -la')).toBe(false);
-    expect(hasBlacklistedCommand('echo Hello World')).toBe(false);
-    expect(hasBlacklistedCommand('git status')).toBe(false);
-    expect(hasBlacklistedCommand('cat /etc/passwd')).toBe(false);
+  it('should reject unauthorized subcommands', () => {
+    expect(validateCommandWithArgs('git danger-command')).toBe(false); // 許可されていないサブコマンド
+  });
+});
+
+describe('findDenyCommandInBlacklist', () => {
+  it('should return DenyCommand for commands containing blacklisted terms', () => {
+    expect(findDenyCommandInBlacklist('rm -rf /')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('echo hello | sudo bash')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('cat file | grep pattern | chmod')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('find . -exec chmod 777 {} ;')).not.toBeNull();
+  });
+
+  it('should return DenyCommand even if blacklisted command is not the base command', () => {
+    expect(findDenyCommandInBlacklist('echo Let me explain how sudo works')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('ls | xargs rm')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('git commit -m "Fix chmod issue"')).not.toBeNull();
+  });
+
+  it('should return null for safe commands with no blacklisted terms', () => {
+    expect(findDenyCommandInBlacklist('ls -la')).toBeNull();
+    expect(findDenyCommandInBlacklist('echo Hello World')).toBeNull();
+    expect(findDenyCommandInBlacklist('git status')).toBeNull();
+    expect(findDenyCommandInBlacklist('cat /etc/passwd')).toBeNull();
   });
 
   it('should handle commands with arguments and pipes correctly', () => {
-    expect(hasBlacklistedCommand('ls -la | grep file | wc -l')).toBe(false);
-    expect(hasBlacklistedCommand('find . -name *.js | xargs cat')).toBe(false);
-    expect(hasBlacklistedCommand('find . -name *.js | xargs black-command-for-test')).toBe(true);
+    expect(findDenyCommandInBlacklist('ls -la | grep file | wc -l')).toBeNull();
+    expect(findDenyCommandInBlacklist('git grep "pattern" -- "*.js"')).toBeNull();
+    expect(findDenyCommandInBlacklist('find . -name *.js | xargs rm')).not.toBeNull();
   });
 
   it('should handle empty or whitespace-only commands', () => {
-    expect(hasBlacklistedCommand('')).toBe(false);
-    expect(hasBlacklistedCommand('   ')).toBe(false);
+    expect(findDenyCommandInBlacklist('')).toBeNull();
+    expect(findDenyCommandInBlacklist('   ')).toBeNull();
+  });
+
+  it('should detect regex pattern blacklisted commands', () => {
+    expect(findDenyCommandInBlacklist('anything with sudo in it')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('run sudo command')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('try to use sudoers')).not.toBeNull();
+  });
+
+  it('should extract the correct base command from a regex pattern', () => {
+    const sudoCommand = findDenyCommandInBlacklist('anything with sudo in it');
+    expect(sudoCommand).not.toBeNull();
+    if (sudoCommand && typeof sudoCommand === 'object') {
+      expect(sudoCommand.command).toBe('regex:.*sudo.*');
+      expect(sudoCommand.message).toBe('sudo コマンドは権限昇格のため使用できません。');
+    }
+
+    const command = findDenyCommandInBlacklist('trying to use sudoers');
+    expect(command).not.toBeNull();
+    if (command && typeof command === 'object') {
+      expect(command.command).toBe('regex:.*sudo.*');
+    }
+  });
+
+  it('should return the correct DenyCommand object for specific commands', () => {
+    const rmCommand = findDenyCommandInBlacklist('rm -rf /');
+    expect(rmCommand).not.toBeNull();
+    expect(typeof rmCommand).toBe('object');
+    if (rmCommand && typeof rmCommand === 'object') {
+      expect(rmCommand.command).toBe('rm');
+      expect(rmCommand.message).toBeDefined();
+    }
+
+    const sudoCommand = findDenyCommandInBlacklist('sudo ls');
+    expect(sudoCommand).not.toBeNull();
+    if (sudoCommand && typeof sudoCommand === 'object') {
+      expect(sudoCommand.command).toBe('regex:.*sudo.*');
+    }
+  });
+});
+
+describe('getBlacklistErrorMessage', () => {
+  it('should return custom error message for blacklisted commands with message', () => {
+    // rmコマンドは message プロパティを持っているはず
+    const rmCommand = {
+      command: 'rm',
+      message:
+        'rm コマンドは危険なため使用できません。代わりにゴミ箱に移動するコマンドを使用してください',
+    };
+    const rmError = getBlacklistErrorMessage(rmCommand);
+    expect(rmError).toContain('代わりにゴミ箱に移動する');
+
+    // sudoコマンドも message プロパティを持っているはず
+    const sudoCommand = {
+      command: 'sudo',
+      message: 'sudo コマンドは権限昇格のため使用できません。',
+    };
+    const sudoError = getBlacklistErrorMessage(sudoCommand);
+    expect(sudoError).toContain('権限昇格');
+  });
+
+  it('should return default error message for commands without message', () => {
+    // messageプロパティがないDenyCommandを作成
+    const denyCommandWithoutMessage: DenyCommand = 'test-command';
+    const defaultError = getBlacklistErrorMessage(denyCommandWithoutMessage);
+    expect(defaultError).toBe(getConfig().defaultErrorMessage);
+  });
+
+  it('should return default error message for commands with undefined message', () => {
+    // messageプロパティが undefined の DenyCommand を作成
+    const denyCommandWithUndefinedMessage: DenyCommand = {
+      command: 'test-command',
+      message: undefined,
+    };
+    const defaultError = getBlacklistErrorMessage(denyCommandWithUndefinedMessage);
+    expect(defaultError).toBe(getConfig().defaultErrorMessage);
   });
 });
 
@@ -119,32 +232,28 @@ describe('handleShellCommand', () => {
 
   it('should reject commands containing blacklisted terms', async () => {
     // Commands with blacklisted terms as base command
-    const result1 = await handleShellCommand('black-command-for-test -rf /tmp/test');
-    expect(result1.content[0].text).toContain('Command not found: black-command-for-test');
+    const result1 = await handleShellCommand('rm -rf /tmp/test');
+    expect(result1.content[0].text).toContain(
+      'rm コマンドは危険なため使用できません。代わりにゴミ箱に移動するコマンドを使用してください'
+    );
 
     // Commands with blacklisted terms in arguments or piped commands
-    const result2 = await handleShellCommand('echo hello | black-command-for-test ls');
-    expect(result2.content[0].text).toContain('Command contains blacklisted words');
+    const result2 = await handleShellCommand('echo hello | sudo ls');
+    expect(result2.content[0].text).toContain('sudo コマンドは権限昇格のため使用できません');
 
-    const result3 = await handleShellCommand('ls | xargs black-command-for-test 777');
-    expect(result3.content[0].text).toContain('Command contains blacklisted words');
+    const result3 = await handleShellCommand('ls | xargs chmod 777');
+    expect(result3.content[0].text).toContain(
+      'chmod コマンドはファイルパーミッションを変更するため使用できません'
+    );
   });
 
   it('should reject blacklisted commands even if they are whitelisted', async () => {
     // Simulate a case where a command is both whitelisted and blacklisted
-    // This is a hypothetical test since the current implementation doesn't have
-    // such a conflict, but it's good to verify this behavior
-
-    // For example, if 'ls' was somehow added to the blacklist:
-    // This test ensures that blacklist check takes precedence over whitelist check
-    // We can't directly manipulate the blacklist in this test, so we use a command that
-    // is definitely blacklisted (black-command-for-test) and check for the correct error message
-
-    const result = await handleShellCommand('black-command-for-test -rf /tmp/test');
+    // We'll test find as it's in both lists in our new configuration
+    const result = await handleShellCommand('find . -name "*.js"');
 
     // Verify the correct error message is returned (blacklist error, not whitelist error)
-    expect(result.content[0].text).toContain('Command not found: black-command-for-test');
-    expect(result.content[0].text).not.toContain('Command not allowed');
+    expect(result.content[0].text).toContain('find コマンドではなく、git grep を使用してください');
   });
 });
 
@@ -228,6 +337,76 @@ describe('Directory Management', () => {
 });
 
 // ALLOWED_DIRECTORIESの環境変数からの読み込みテスト
+describe('getAllowedDirectoriesFromConfig', () => {
+  // 環境変数のモックを管理するために、afterEachフックを追加
+  afterEach(() => {
+    // 環境変数のモックをリセット
+    vi.unstubAllEnvs();
+  });
+
+  it('should merge directories from config and environment variables', () => {
+    // Mock configuration
+    vi.spyOn(getConfig(), 'allowedDirectories', 'get').mockReturnValue([
+      '/config/dir1',
+      '/config/dir2',
+    ]);
+    // Mock environment variable
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', '/env/dir1:/env/dir2');
+
+    const result = getAllowedDirectoriesFromConfig();
+
+    // Should include directories from both sources
+    expect(result).toContain('/config/dir1');
+    expect(result).toContain('/config/dir2');
+    expect(result).toContain('/env/dir1');
+    expect(result).toContain('/env/dir2');
+    expect(result.length).toBe(4);
+  });
+
+  it('should work with only config directories', () => {
+    // Mock configuration
+    vi.spyOn(getConfig(), 'allowedDirectories', 'get').mockReturnValue([
+      '/config/dir1',
+      '/config/dir2',
+    ]);
+    // Empty environment variable
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', '');
+
+    const result = getAllowedDirectoriesFromConfig();
+
+    // Should include only config directories
+    expect(result).toContain('/config/dir1');
+    expect(result).toContain('/config/dir2');
+    expect(result.length).toBe(2);
+  });
+
+  it('should work with only environment variable directories', () => {
+    // Empty config
+    vi.spyOn(getConfig(), 'allowedDirectories', 'get').mockReturnValue([]);
+    // Mock environment variable
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', '/env/dir1:/env/dir2');
+
+    const result = getAllowedDirectoriesFromConfig();
+
+    // Should include only environment variable directories
+    expect(result).toContain('/env/dir1');
+    expect(result).toContain('/env/dir2');
+    expect(result.length).toBe(2);
+  });
+
+  it('should return empty array when both sources are empty', () => {
+    // Empty config
+    vi.spyOn(getConfig(), 'allowedDirectories', 'get').mockReturnValue([]);
+    // Empty environment variable
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', '');
+
+    const result = getAllowedDirectoriesFromConfig();
+
+    // Should be empty
+    expect(result.length).toBe(0);
+  });
+});
+
 describe('parseAllowedDirectories', () => {
   // 環境変数のモックを管理するために、afterEachフックを追加
   afterEach(() => {
@@ -319,6 +498,32 @@ describe('handleShellCommand with Directory Parameter', () => {
 
     // Verify it still uses the previously set directory
     expect(result.content[0].text).toContain(testDir);
+  });
+
+  it('should add a message when specifying the same directory', async () => {
+    // First set a working directory
+    setWorkingDirectory(testDir);
+
+    // Then run a command specifying the same directory
+    const result = await handleShellCommand('pwd', testDir);
+
+    // Verify the additional message is included
+    expect(result.content[1].text).toContain(
+      "**Note:** You don't need to specify the same directory"
+    );
+  });
+
+  it('should not add a message when specifying a different directory', async () => {
+    // First set a working directory
+    setWorkingDirectory(homeDir);
+
+    // Then run a command specifying a different directory
+    const result = await handleShellCommand('pwd', testDir);
+
+    // Verify the additional message is not included
+    expect(result.content[1].text).not.toContain(
+      "**Note:** You don't need to specify the same directory"
+    );
   });
 
   it('should throw an error when specifying an invalid directory', async () => {

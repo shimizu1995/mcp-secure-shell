@@ -1,0 +1,35 @@
+{
+  "allowedDirectories": ["/Users/username/projects", "/tmp/safe-directory"],
+  "allowCommands": [
+    "ls",
+    "echo",
+    "cat",
+    "grep",
+    {
+      "command": "git",
+      "subCommands": ["status", "log", "diff", "grep", "branch", "show", "pull", "fetch"]
+    },
+    {
+      "command": "npm",
+      "subCommands": ["test", "run", "install", "ci"]
+    }
+  ],
+  "denyCommands": [
+    {
+      "command": "rm",
+      "message": "rm コマンドは危険なため使用できません。代わりにゴミ箱に移動するコマンドを使用してください",
+      "alternatives": ["trash", "gio trash"]
+    },
+    {
+      "command": "find",
+      "message": "findコマンドではなく、git grepを使用してください",
+      "alternatives": ["git grep"]
+    },
+    {
+      "command": "regex:.*sudo.*",
+      "message": "sudo コマンドは権限昇格のため使用できません"
+    }
+  ],
+  "defaultErrorMessage": "このコマンドは許可リストに含まれていないため実行できません。システム管理者に連絡してください。",
+  "mergeMode": "merge"
+}

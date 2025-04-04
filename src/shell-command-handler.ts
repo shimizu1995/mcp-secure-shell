@@ -2,8 +2,10 @@ import { execa } from 'execa';
 import { sync as commandExistsSync } from 'command-exists';
 import path from 'path';
 import fs from 'fs';
+import { getConfig } from './config/config-loader.js';
+import { isRegexPattern, getRegexFromPattern, DenyCommand } from './config/shell-command-config.js';
 
-// Parse allowed directories from environment variable
+// Parse allowed directories from environment variable (for backward compatibility)
 export function parseAllowedDirectories(): string[] {
   const allowedDirsEnv = process.env.MCP_ALLOWED_DIRECTORIES;
   if (!allowedDirsEnv) {
@@ -15,15 +17,20 @@ export function parseAllowedDirectories(): string[] {
     .filter((dir) => dir.length > 0);
 }
 
-// Set of allowed directories (subdirectories of these are also allowed)
-// Read from MCP_ALLOWED_DIRECTORIES environment variable
-// Format: directory1:directory2:directory3
+// Gets the allowed directories from config and environment variables (for backward compatibility)
+export function getAllowedDirectoriesFromConfig(): string[] {
+  const config = getConfig();
+  // First use directories from config, then add ones from environment variables for backward compatibility
+  const envDirectories = parseAllowedDirectories();
+  return [...config.allowedDirectories, ...envDirectories];
+}
+
 // If not set, no directories are allowed
-let ALLOWED_DIRECTORIES = parseAllowedDirectories();
+let ALLOWED_DIRECTORIES = getAllowedDirectoriesFromConfig();
 
 // For testing purposes - allows refreshing the allowed directories
 export function refreshAllowedDirectories(): void {
-  ALLOWED_DIRECTORIES = parseAllowedDirectories();
+  ALLOWED_DIRECTORIES = getAllowedDirectoriesFromConfig();
 }
 
 // For testing purposes - gets the current allowed directories
@@ -34,101 +41,118 @@ export function getAllowedDirectories(): string[] {
 // Track the current working directory
 let currentWorkingDirectory = process.cwd();
 
-// ホワイトリストに登録されたコマンドのみ実行を許可する
-const WHITELISTED_COMMANDS = new Set([
-  // 基本的なファイル操作コマンド
-  'ls',
-  'dir',
-  'cat',
-  'more',
-  'less',
-  'head',
-  'tail',
-
-  // ディレクトリ操作コマンド
-  'cd',
-  'pwd',
-  'mkdir',
-
-  // 検索コマンド
-  'find',
-  'grep',
-  'which',
-  'whereis',
-
-  // ファイル情報コマンド
-  'file',
-  'stat',
-  'wc',
-
-  // その他の一般的なコマンド
-  'echo',
-  'date',
-  'cal',
-
-  // 開発関連コマンド
-  'git',
-  'npm',
-]);
-
-// Dangerous commands that should never be allowed
-const BLACKLISTED_COMMANDS = [
-  // File System Destruction Commands
-  'rm', // Remove files/directories - Could delete critical system or user files
-  'rmdir', // Remove directories - Could delete important directories
-  'del', // Windows delete command - Same risks as rm
-
-  // Disk/Filesystem Commands
-  // 'format', // Formats entire disks/partitions - Could destroy all data on drives
-  'mkfs', // Make filesystem - Could reformat drives and destroy data
-  'dd', // Direct disk access - Can overwrite raw disks, often called "disk destroyer"
-
-  // Permission/Ownership Commands
-  'chmod', // Change file permissions - Could make critical files accessible or inaccessible
-  'chown', // Change file ownership - Could transfer ownership of sensitive files
-
-  // Privilege Escalation Commands
-  'sudo', // Superuser do - Allows running commands with elevated privileges
-  'su', // Switch user - Could be used to gain unauthorized user access
-
-  // Code Execution Commands
-  'exec', // Execute commands - Could run arbitrary commands with shell's privileges
-  'eval', // Evaluate strings as code - Could execute malicious code injection
-
-  // System Communication Commands
-  'write', // Write to other users' terminals - Could be used for harassment/phishing
-  'wall', // Write to all users - Could be used for system-wide harassment
-
-  // System Control Commands
-  'shutdown', // Shut down the system - Denial of service
-  'reboot', // Restart the system - Denial of service
-  'init', // System initialization control - Could disrupt system state
-
-  // Additional High-Risk Commands
-  'mkfs', // Duplicate of above, filesystem creation - Data destruction risk
-
-  // for unit test
-  'black-command-for-test', // Dummy command for testing
-
-  'install', // Could be used to install malicious software
-  'brew',
-];
-
 /**
- * コマンドがホワイトリストに登録されているか検証する関数
+ * コマンド文字列から基本コマンドを取得する
  */
-export function validateCommand(baseCommand: string): boolean {
-  return WHITELISTED_COMMANDS.has(baseCommand);
+function getCommandName(commandStr: string | { command: string; subCommands?: string[] }): string {
+  if (typeof commandStr === 'string') {
+    return commandStr;
+  }
+  return commandStr.command;
 }
 
-export function hasBlacklistedCommand(command: string): boolean {
+/**
+ * コマンドが許可リストに登録されているか検証する関数
+ */
+export function validateCommand(baseCommand: string): boolean {
+  const config = getConfig();
+
+  // 許可リスト内のコマンドとマッチするか確認
+  const matchedCommand = config.allowCommands.find((cmd) => {
+    const cmdName = getCommandName(cmd);
+    return cmdName === baseCommand;
+  });
+
+  return matchedCommand !== undefined;
+}
+
+/**
+ * コマンドが許可リストに登録されているか検証する関数
+ * サブコマンドも含めて検証
+ */
+export function validateCommandWithArgs(command: string): boolean {
+  const config = getConfig();
+  const parts = command.trim().split(/\s+/);
+  const baseCommand = parts[0];
+
+  // 許可リスト内のコマンドとマッチするか確認
+  const matchedCommand = config.allowCommands.find((cmd) => {
+    const cmdName = getCommandName(cmd);
+    return cmdName === baseCommand;
+  });
+
+  // コマンドが許可リストに存在しない
+  if (matchedCommand === undefined) {
+    return false;
+  }
+
+  // 文字列のみの場合はすべてのサブコマンドを許可
+  if (typeof matchedCommand === 'string') {
+    return true;
+  }
+
+  // オブジェクト形式でsubCommandsがある場合
+  if (matchedCommand.subCommands && parts.length > 1) {
+    const subCommand = parts[1];
+    return matchedCommand.subCommands.includes(subCommand);
+  }
+
+  // オブジェクト形式だがsubCommandsがない場合、または
+  // サブコマンドが指定されていない場合は許可
+  return true;
+}
+
+/**
+ * DenyCommandからコマンド名を抽出
+ */
+function getDenyCommandName(denyCmd: DenyCommand): string {
+  return typeof denyCmd === 'string' ? denyCmd : denyCmd.command;
+}
+
+/**
+ * コマンドがブラックリストに含まれているかチェック
+ */
+export function findDenyCommandInBlacklist(command: string): DenyCommand | null {
+  const config = getConfig();
   const commands = command.trim().split(/\s+/);
+
+  // 各コマンドがブラックリストに含まれているかチェック
   for (const cmd of commands) {
-    if (BLACKLISTED_COMMANDS.includes(cmd)) {
-      return true;
+    const blacklistedCmd = config.denyCommands.find((denyCmd) => {
+      const cmdName = getDenyCommandName(denyCmd);
+      return cmdName === cmd;
+    });
+
+    if (blacklistedCmd) {
+      return blacklistedCmd;
     }
   }
-  return false;
+
+  // 正規表現パターンとのマッチングをチェック
+  for (const denyCmd of config.denyCommands) {
+    const cmdName = getDenyCommandName(denyCmd);
+    if (isRegexPattern(cmdName)) {
+      const regex = getRegexFromPattern(cmdName);
+      if (regex.test(command)) {
+        return denyCmd;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * ブラックリストコマンドのエラーメッセージを取得
+ */
+export function getBlacklistErrorMessage(denyCommand: DenyCommand): string {
+  if (typeof denyCommand === 'object' && denyCommand.message) {
+    return denyCommand.message;
+  }
+
+  const config = getConfig();
+  // デフォルトメッセージ
+  return config.defaultErrorMessage;
 }
 
 /**
@@ -137,10 +161,6 @@ export function hasBlacklistedCommand(command: string): boolean {
 export function isDirectoryAllowed(dir: string): boolean {
   // Resolve to absolute path
   const absoluteDir = path.resolve(dir);
-  if (absoluteDir === path.sep) {
-    // Root directory is not allowed
-    return false;
-  }
 
   // Check if the directory exists
   try {
@@ -199,7 +219,13 @@ export async function handleShellCommand(
 ): Promise<HandlerReturnType> {
   try {
     // If directory is specified, set it as the working directory
+    let isSameDirectory = false;
     if (directory) {
+      const resolvedDirectory = path.resolve(directory);
+      const resolvedCurrentDir = path.resolve(currentWorkingDirectory);
+      isSameDirectory = resolvedDirectory === resolvedCurrentDir;
+
+      // Even if it's the same directory, we still call setWorkingDirectory to validate
       setWorkingDirectory(directory);
     }
 
@@ -211,14 +237,15 @@ export async function handleShellCommand(
       throw new Error(`Command not found: ${baseCommand}`);
     }
 
-    // コマンドが許可リストに含まれているか確認
-    if (!validateCommand(baseCommand)) {
-      throw new Error(`Command not allowed: ${baseCommand}`);
+    // command自体にblacklistの単語が含まれている場合は実行しない
+    const denyCommand = findDenyCommandInBlacklist(command);
+    if (denyCommand) {
+      throw new Error(getBlacklistErrorMessage(denyCommand));
     }
 
-    // command自体にblacklistの単語が含まれている場合は実行しない
-    if (hasBlacklistedCommand(command)) {
-      throw new Error(`Command contains blacklisted words: ${command}`);
+    // コマンドが許可リストに含まれているか確認
+    if (!validateCommandWithArgs(command)) {
+      throw new Error(`Command not allowed: ${baseCommand}`);
     }
 
     // コマンド実行
@@ -229,6 +256,13 @@ export async function handleShellCommand(
       cwd: currentWorkingDirectory, // Use the current working directory
     })`${command}`;
 
+    // Prepare the response message about directory
+    const dirMessage = `executed in ${currentWorkingDirectory}`;
+    let additionalInfo = '';
+    if (directory && isSameDirectory) {
+      additionalInfo = `\n\n> **Note:** You don't need to specify the same directory as the current one.`;
+    }
+
     return {
       content: [
         {
@@ -238,7 +272,7 @@ export async function handleShellCommand(
         },
         {
           type: 'text',
-          text: `executed in ${currentWorkingDirectory}`,
+          text: dirMessage + additionalInfo,
           mimeType: 'text/plain',
         },
       ],
