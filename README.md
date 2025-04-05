@@ -24,6 +24,10 @@ A sample configuration file is provided at `mcp-config.sample.json`.
     {
       "command": "git",
       "subCommands": ["status", "log", "diff", "grep"]
+    },
+    {
+      "command": "npm",
+      "denySubCommands": ["install", "uninstall", "update", "audit"]
     }
   ],
   "denyCommands": [
@@ -57,7 +61,10 @@ A sample configuration file is provided at `mcp-config.sample.json`.
    - An array of strings or objects specifying allowed commands
    - String values (e.g., "ls") allow the command with all subcommands
    - Object format with `command` and optional `subCommands` array restricts to specific subcommands
-   - Example: `{"command": "git", "subCommands": ["status", "log"]}`
+   - Object format with `command` and optional `denySubCommands` array allows all subcommands except those specified
+   - Examples: 
+     - `{"command": "git", "subCommands": ["status", "log"]}` - Only allows git with status and log subcommands
+     - `{"command": "npm", "denySubCommands": ["install", "uninstall"]}` - Allows npm with any subcommand except install and uninstall
 
 3. **denyCommands**: Specifies commands that are explicitly denied
 
