@@ -62,7 +62,7 @@ A sample configuration file is provided at `mcp-config.sample.json`.
    - String values (e.g., "ls") allow the command with all subcommands
    - Object format with `command` and optional `subCommands` array restricts to specific subcommands
    - Object format with `command` and optional `denySubCommands` array allows all subcommands except those specified
-   - Examples: 
+   - Examples:
      - `{"command": "git", "subCommands": ["status", "log"]}` - Only allows git with status and log subcommands
      - `{"command": "npm", "denySubCommands": ["install", "uninstall"]}` - Allows npm with any subcommand except install and uninstall
 

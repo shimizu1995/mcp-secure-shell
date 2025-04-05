@@ -2,9 +2,15 @@
   "allowedDirectories": ["/Users/username/projects", "/tmp/safe-directory"],
   "allowCommands": [
     "ls",
-    "echo",
-    "cat",
+    "pwd",
     "grep",
+    "which",
+    "whereis",
+    "file",
+    "stat",
+    "wc",
+    "date",
+    "cal",
     {
       "command": "git",
       "subCommands": ["status", "log", "diff", "grep", "branch", "show", "pull", "fetch"]
@@ -16,18 +22,26 @@
   ],
   "denyCommands": [
     {
+      "command": "cd",
+      "message": "specify directory in arguments instead of using cd"
+    },
+    {
+      "command": "cat",
+      "message": "use read_file or read_multiple_files tools provided by filesystem server instead of cat"
+    },
+    {
       "command": "rm",
-      "message": "rm コマンドは危険なため使用できません。代わりにゴミ箱に移動するコマンドを使用してください"
+      "message": "Run `git rm` instead of rm"
     },
     {
       "command": "find",
-      "message": "findコマンドではなく、git grepを使用してください"
+      "message": "Run `git ls-tree` command or `git ls-files` command instead of `find` command"
     },
     {
       "command": "regex:.*sudo.*",
-      "message": "sudo コマンドは権限昇格のため使用できません"
+      "message": "sudo is not allowed"
     }
   ],
-  "defaultErrorMessage": "このコマンドは許可リストに含まれていないため実行できません。システム管理者に連絡してください。",
-  "mergeMode": "merge"
+  "defaultErrorMessage": "this command is not allowed",
+  "mergeMode": "override"
 }

@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isRegexPattern,
-  getRegexFromPattern,
-  DEFAULT_CONFIG,
-} from '../config/shell-command-config.js';
+import { isRegexPattern, getRegexFromPattern } from '../config/shell-command-config.js';
 
 describe('Shell Command Config Utilities', () => {
   describe('isRegexPattern', () => {
@@ -44,53 +40,6 @@ describe('Shell Command Config Utilities', () => {
       const negationRegex = getRegexFromPattern('regex:[^a-z]');
       expect(negationRegex.test('A')).toBe(true);
       expect(negationRegex.test('a')).toBe(false);
-    });
-  });
-
-  describe('DEFAULT_CONFIG', () => {
-    it('should have required properties', () => {
-      expect(DEFAULT_CONFIG).toHaveProperty('allowCommands');
-      expect(DEFAULT_CONFIG).toHaveProperty('denyCommands');
-      expect(DEFAULT_CONFIG).toHaveProperty('defaultErrorMessage');
-    });
-
-    it('should include common commands in allowCommands', () => {
-      expect(DEFAULT_CONFIG.allowCommands).toBeDefined();
-      expect(DEFAULT_CONFIG.allowCommands).toBeInstanceOf(Array);
-      expect(DEFAULT_CONFIG.allowCommands.length).toBeGreaterThan(0);
-
-      // gitコマンドがObjectタイプであることを確認
-      const gitCommand = DEFAULT_CONFIG.allowCommands.find(
-        (cmd) => typeof cmd === 'object' && cmd.command === 'git'
-      );
-      expect(gitCommand).toBeDefined();
-      expect(typeof gitCommand !== 'string').toBe(true);
-      if (typeof gitCommand === 'object') {
-        expect(gitCommand).toHaveProperty('subCommands');
-      }
-    });
-
-    it('should include dangerous commands in denyCommands', () => {
-      expect(DEFAULT_CONFIG.denyCommands).toBeDefined();
-      expect(DEFAULT_CONFIG.denyCommands).toBeInstanceOf(Array);
-
-      // rmコマンドを検索
-      const rmCommand = DEFAULT_CONFIG.denyCommands.find(
-        (cmd) => typeof cmd === 'object' && cmd.command === 'rm'
-      );
-      expect(rmCommand).toBeDefined();
-      if (typeof rmCommand === 'object') {
-        expect(rmCommand).toHaveProperty('message');
-      }
-
-      // 正規表現パターンの確認
-      const regexCommand = DEFAULT_CONFIG.denyCommands.find(
-        (cmd) => typeof cmd === 'object' && 'command' in cmd && isRegexPattern(cmd.command)
-      );
-      expect(regexCommand).toBeDefined();
-      if (regexCommand && typeof regexCommand === 'object') {
-        expect(regexCommand.command).toContain('sudo');
-      }
     });
   });
 });

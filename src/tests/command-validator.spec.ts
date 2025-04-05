@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import path from 'path';
 import { DenyCommand } from '../config/shell-command-config.js';
 import {
   validateCommand,
@@ -9,9 +8,6 @@ import {
   getCommandName,
 } from '../command-validator.js';
 import { getConfig, reloadConfig } from '../config/config-loader.js';
-
-const CONFIG_FOR_TEST = path.join(__dirname, 'mcp-test-config.json');
-process.env.MCP_CONFIG_PATH = CONFIG_FOR_TEST;
 
 // コンフィグの初期化
 describe('Config Initialization', () => {

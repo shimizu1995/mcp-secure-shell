@@ -11,9 +11,6 @@ import {
   getWorkingDirectory,
 } from '../directory-manager.js';
 
-const CONFIG_FOR_TEST = path.join(__dirname, 'mcp-test-config.json');
-process.env.MCP_CONFIG_PATH = CONFIG_FOR_TEST;
-
 describe('Directory Management', () => {
   // Real allowed directories pattern to test against
   const homeDir = process.env.HOME || process.cwd();

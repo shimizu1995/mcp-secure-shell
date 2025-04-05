@@ -1,22 +1,39 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as configLoader from '../config/config-loader.js';
-import { DEFAULT_CONFIG, ConfigMergeMode } from '../config/shell-command-config.js';
+import { CONFIG_NOT_FOUND_ERROR } from '../config/config-loader.js';
+import { ConfigMergeMode, ShellCommandConfig } from '../config/shell-command-config.js';
 import fs from 'fs';
-import path from 'path';
+import * as nodePath from 'path';
 
 describe('Config Loader', () => {
   const originalEnv = process.env.MCP_CONFIG_PATH;
   let tempConfigPath: string;
 
+  // テスト用の標準的な設定オブジェクト
+  const mockConfig: ShellCommandConfig = {
+    allowedDirectories: ['/test-dir'],
+    allowCommands: ['ls', 'pwd', 'cd'],
+    denyCommands: ['rm', 'sudo'],
+    defaultErrorMessage: '許可されていないコマンドです。',
+    mergeMode: ConfigMergeMode.MERGE,
+  };
+
   beforeEach(() => {
-    // テスト用のconfig-loaderの動作をモック化する
-    // 実際にファイルを書き込む代わりにモック化する
-    vi.spyOn(configLoader, 'loadConfig').mockImplementation(() => {
-      return { ...DEFAULT_CONFIG };
+    // 一時的な設定ファイルのパスを作成
+    tempConfigPath = nodePath.join(__dirname, 'temp-config-' + Date.now() + '.json');
+
+    // fsモジュールをモック化
+    vi.spyOn(fs, 'existsSync').mockImplementation((filepath: fs.PathLike) => {
+      return filepath.toString() === tempConfigPath;
     });
 
-    // 一時的な設定ファイルのパスを作成
-    tempConfigPath = path.join(process.cwd(), 'temp-config-' + Date.now() + '.json');
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filepath) => {
+      if (filepath.toString() === tempConfigPath) {
+        return JSON.stringify(mockConfig);
+      }
+      throw new Error(`ファイルが見つかりません: ${filepath}`);
+    });
+
     // 環境変数をモック
     vi.stubEnv('MCP_CONFIG_PATH', tempConfigPath);
   });
@@ -31,190 +48,96 @@ describe('Config Loader', () => {
     } else {
       vi.stubEnv('MCP_CONFIG_PATH', '');
     }
-
-    // ファイルが存在すれば削除
-    if (fs.existsSync(tempConfigPath)) {
-      try {
-        fs.unlinkSync(tempConfigPath);
-      } catch (e) {
-        console.error('Failed to delete temp config file:', e);
-      }
-    }
   });
 
-  it('should load default config when no config file exists', () => {
-    // 設定ファイルがない場合はデフォルト設定が返されることをテスト
-    vi.spyOn(configLoader, 'loadConfig').mockImplementation(() => {
-      return { ...DEFAULT_CONFIG };
+  it('should throw error when config file path is not set', () => {
+    // 環境変数をクリアする
+    vi.stubEnv('MCP_CONFIG_PATH', '');
+
+    // 設定ファイルパスが設定されていない場合はエラーをスローする
+    expect(() => configLoader.loadConfig()).toThrowError(CONFIG_NOT_FOUND_ERROR);
+  });
+
+  it('should throw error when config file does not exist', () => {
+    // 存在しないファイルパスを設定
+    const nonExistentPath = '/path/to/nonexistent/config.json';
+    vi.stubEnv('MCP_CONFIG_PATH', nonExistentPath);
+
+    // existsSyncの戻り値を再設定
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false); // どのパスも存在しない
+
+    // 設定ファイルが存在しない場合はエラーをスローする
+    expect(() => configLoader.loadConfig()).toThrowError(
+      `設定ファイルが存在しません: ${nonExistentPath}`
+    );
+  });
+
+  it('should throw error when config file is malformed', () => {
+    // JSONでないファイルをモック
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      return 'This is not a valid JSON';
     });
 
+    // 不正な設定ファイルの場合はエラーをスローする
+    expect(() => configLoader.loadConfig()).toThrow();
+  });
+
+  it('should throw error when config file is missing required properties', () => {
+    // 必要なプロパティが不足している設定ファイルをモック
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      return JSON.stringify({
+        // allowCommandsがない
+        allowedDirectories: ['/test-dir'],
+        denyCommands: ['rm', 'sudo'],
+      });
+    });
+
+    // 必要なプロパティが不足している場合はエラーをスローする
+    expect(() => configLoader.loadConfig()).toThrowError(
+      `設定ファイルに必要なプロパティが存在しません`
+    );
+  });
+
+  it('should successfully load valid config', () => {
+    // デフォルトのモックは有効な設定なので、そのまま使用できる
     const config = configLoader.loadConfig();
+
+    // 設定が正しく読み込まれているか確認
     expect(config).toHaveProperty('allowCommands');
     expect(config).toHaveProperty('denyCommands');
+    expect(config).toHaveProperty('allowedDirectories');
     expect(config).toHaveProperty('defaultErrorMessage');
-    expect(config.defaultErrorMessage).toBe(DEFAULT_CONFIG.defaultErrorMessage);
-  });
+    expect(config).toHaveProperty('mergeMode');
 
-  it('should load and merge custom config with default config', () => {
-    const mockCustomCommand = 'custom-command';
-
-    vi.spyOn(configLoader, 'loadConfig').mockImplementation(() => {
-      return {
-        allowedDirectories: [],
-        allowCommands: [...DEFAULT_CONFIG.allowCommands, mockCustomCommand],
-        denyCommands: [
-          ...DEFAULT_CONFIG.denyCommands,
-          { command: 'custom-deny', message: 'Custom deny message' },
-        ],
-        defaultErrorMessage: 'Custom error message',
-      };
-    });
-
-    const config = configLoader.loadConfig();
-
-    // カスタムコマンドが追加されているか確認
-    const customCommand = config.allowCommands.find((cmd) =>
-      typeof cmd === 'string' ? cmd === mockCustomCommand : cmd.command === mockCustomCommand
-    );
-    expect(customCommand).toBeDefined();
-
-    // デフォルトコマンドが保持されているか確認
-    const lsCommand = config.allowCommands.find((cmd) =>
-      typeof cmd === 'string' ? cmd === 'ls' : cmd.command === 'ls'
-    );
-    expect(lsCommand).toBeDefined();
-
-    // カスタム拒否コマンドが追加されているか確認
-    const customDenyCommand = config.denyCommands.find(
-      (cmd) => typeof cmd !== 'string' && cmd.command === 'custom-deny'
-    );
-    expect(customDenyCommand).toBeDefined();
-
-    // カスタムエラーメッセージが設定されているか確認
-    expect(config.defaultErrorMessage).toBe('Custom error message');
-  });
-
-  it('should handle malformed config file gracefully', () => {
-    // 不正な設定ファイルの場合はデフォルト設定が返されることをテスト
-    vi.spyOn(configLoader, 'loadConfig').mockImplementation(() => {
-      return { ...DEFAULT_CONFIG };
-    });
-
-    const config = configLoader.loadConfig();
-    expect(config).toHaveProperty('allowCommands');
-    expect(config).toHaveProperty('denyCommands');
-    expect(config).toHaveProperty('defaultErrorMessage');
+    // 設定値が正しいか確認
+    expect(config.allowCommands).toContain('ls');
+    expect(config.denyCommands).toContain('rm');
+    expect(config.allowedDirectories).toContain('/test-dir');
+    expect(config.defaultErrorMessage).toBe('許可されていないコマンドです。');
+    expect(config.mergeMode).toBe(ConfigMergeMode.MERGE);
   });
 
   it('should get current config and reload it', () => {
-    // 初期設定はデフォルト
+    // 初期設定
+    const initialConfig = mockConfig;
     vi.spyOn(configLoader, 'getConfig').mockImplementation(() => {
-      return { ...DEFAULT_CONFIG };
+      return { ...initialConfig };
     });
 
-    const initialConfig = configLoader.getConfig();
-    expect(initialConfig).toHaveProperty('defaultErrorMessage');
+    const config = configLoader.getConfig();
+    expect(config).toEqual(initialConfig);
 
     // 再読み込み後は新しい設定
+    const updatedConfig = {
+      ...initialConfig,
+      defaultErrorMessage: '新しいエラーメッセージ',
+    };
+
     vi.spyOn(configLoader, 'reloadConfig').mockImplementation(() => {
-      return {
-        ...DEFAULT_CONFIG,
-        defaultErrorMessage: 'New error message',
-      };
+      return updatedConfig;
     });
 
     const reloadedConfig = configLoader.reloadConfig();
-    expect(reloadedConfig.defaultErrorMessage).toBe('New error message');
-  });
-
-  it('should use default mode (MERGE) when not specified', () => {
-    // マージモードを指定しない場合はデフォルトのMERGEが使われる
-    vi.spyOn(configLoader, 'loadConfig').mockImplementation(() => {
-      const customConfig = {
-        allowCommands: ['custom-command'],
-        // mergeModeを指定しない
-      };
-
-      // 物理的には実装関数を呼び出さずにテストに必要なデータを返す
-      return {
-        allowedDirectories: [],
-        allowCommands: [...DEFAULT_CONFIG.allowCommands, ...customConfig.allowCommands],
-        denyCommands: DEFAULT_CONFIG.denyCommands,
-        defaultErrorMessage: DEFAULT_CONFIG.defaultErrorMessage,
-        mergeMode: ConfigMergeMode.MERGE,
-      };
-    });
-
-    const config = configLoader.loadConfig();
-
-    // デフォルトのコマンドが含まれていることを確認
-    expect(config.allowCommands).toContain('ls');
-
-    // カスタムコマンドも含まれていることを確認
-    const hasCustomCommand = config.allowCommands.some((cmd) =>
-      typeof cmd === 'string' ? cmd === 'custom-command' : cmd.command === 'custom-command'
-    );
-    expect(hasCustomCommand).toBe(true);
-  });
-
-  it('should overwrite default config in OVERWRITE mode', () => {
-    // OVERWRITEモードで、カスタム設定がデフォルト設定を上書きすることをテスト
-    vi.spyOn(configLoader, 'loadConfig').mockImplementation(() => {
-      const customConfig = {
-        allowCommands: ['custom-only-command'],
-        mergeMode: ConfigMergeMode.OVERWRITE,
-      };
-
-      return {
-        allowedDirectories: [],
-        allowCommands: customConfig.allowCommands,
-        denyCommands: DEFAULT_CONFIG.denyCommands,
-        defaultErrorMessage: DEFAULT_CONFIG.defaultErrorMessage,
-        mergeMode: customConfig.mergeMode,
-      };
-    });
-
-    const config = configLoader.loadConfig();
-
-    // デフォルトコマンドは含まれていないことを確認
-    const hasLsCommand = config.allowCommands.some((cmd) =>
-      typeof cmd === 'string' ? cmd === 'ls' : cmd.command === 'ls'
-    );
-    expect(hasLsCommand).toBe(false);
-
-    // カスタムコマンドのみが含まれていることを確認
-    expect(config.allowCommands.length).toBe(1);
-    const hasCustomCommand = config.allowCommands.some((cmd) =>
-      typeof cmd === 'string'
-        ? cmd === 'custom-only-command'
-        : cmd.command === 'custom-only-command'
-    );
-    expect(hasCustomCommand).toBe(true);
-  });
-
-  it('should fall back to default when config property is missing in OVERWRITE mode', () => {
-    // OVERWRITEモードでもプロパティがや欠けているとデフォルトが使われることを確認
-    vi.spyOn(configLoader, 'loadConfig').mockImplementation(() => {
-      const customConfig = {
-        // allowCommandsがない
-        mergeMode: ConfigMergeMode.OVERWRITE,
-      };
-
-      return {
-        allowedDirectories: [],
-        allowCommands: DEFAULT_CONFIG.allowCommands, // 欄がない場合はデフォルトが使われる
-        denyCommands: DEFAULT_CONFIG.denyCommands,
-        defaultErrorMessage: DEFAULT_CONFIG.defaultErrorMessage,
-        mergeMode: customConfig.mergeMode,
-      };
-    });
-
-    const config = configLoader.loadConfig();
-
-    // デフォルトのコマンドが含まれていることを確認
-    const hasLsCommand = config.allowCommands.some((cmd) =>
-      typeof cmd === 'string' ? cmd === 'ls' : cmd.command === 'ls'
-    );
-    expect(hasLsCommand).toBe(true);
+    expect(reloadedConfig.defaultErrorMessage).toBe('新しいエラーメッセージ');
   });
 });

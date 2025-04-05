@@ -1,64 +1,51 @@
 import fs from 'fs';
-import { ShellCommandConfig, DEFAULT_CONFIG, ConfigMergeMode } from './shell-command-config.js';
+import { ShellCommandConfig, ConfigMergeMode } from './shell-command-config.js';
+
+/**
+ * 設定ファイルが見つからない場合のエラーメッセージ
+ */
+export const CONFIG_NOT_FOUND_ERROR =
+  '設定ファイルが見つかりません。MCP_CONFIG_PATH 環境変数を設定してください。';
 
 /**
  * 設定ファイルを読み込む関数
  */
-/**
- * 設定をデフォルト設定とマージする関数
- */
-function mergeWithDefaultConfig(config: Partial<ShellCommandConfig>): ShellCommandConfig {
-  return {
-    // 前半はデフォルト設定、後半はカスタム設定で上書き
-    allowedDirectories: [
-      ...DEFAULT_CONFIG.allowedDirectories,
-      ...(config.allowedDirectories || []),
-    ],
-    allowCommands: [...DEFAULT_CONFIG.allowCommands, ...(config.allowCommands || [])],
-    denyCommands: [...DEFAULT_CONFIG.denyCommands, ...(config.denyCommands || [])],
-    defaultErrorMessage: config.defaultErrorMessage || DEFAULT_CONFIG.defaultErrorMessage,
-    mergeMode: config.mergeMode || DEFAULT_CONFIG.mergeMode,
-  };
-}
-
-/**
- * カスタム設定でデフォルト値を上書きする関数
- */
-function overwriteDefaultConfig(config: Partial<ShellCommandConfig>): ShellCommandConfig {
-  return {
-    // allowCommandsとdenyCommandsが設定されていればそれを使う、なければデフォルトを使う
-    allowedDirectories: config.allowedDirectories || DEFAULT_CONFIG.allowedDirectories,
-    allowCommands: config.allowCommands || DEFAULT_CONFIG.allowCommands,
-    denyCommands: config.denyCommands || DEFAULT_CONFIG.denyCommands,
-    defaultErrorMessage: config.defaultErrorMessage || DEFAULT_CONFIG.defaultErrorMessage,
-    mergeMode: config.mergeMode || DEFAULT_CONFIG.mergeMode,
-  };
-}
+// マージ関連の機能は現在使用していないためコメントアウト
 
 export function loadConfig(): ShellCommandConfig {
-  try {
-    // 設定ファイルが存在するか確認
-    const configPath = process.env.MCP_CONFIG_PATH;
-    if (configPath && fs.existsSync(configPath)) {
-      const configContent = fs.readFileSync(configPath, 'utf-8');
-      const config = JSON.parse(configContent) as Partial<ShellCommandConfig>;
-
-      // マージモードに応じて処理を分岐
-      const mergeMode = config.mergeMode || DEFAULT_CONFIG.mergeMode;
-
-      if (mergeMode === ConfigMergeMode.OVERWRITE) {
-        return overwriteDefaultConfig(config);
-      } else {
-        // デフォルトはマージモード
-        return mergeWithDefaultConfig(config);
-      }
-    }
-  } catch (error) {
-    console.error(`Error loading config file: ${error}`);
+  // 設定ファイルが存在するか確認
+  const configPath = process.env.MCP_CONFIG_PATH;
+  if (!configPath) {
+    throw new Error(CONFIG_NOT_FOUND_ERROR);
   }
 
-  // 設定ファイルがないかエラーが発生した場合はデフォルト設定を使用
-  return { ...DEFAULT_CONFIG };
+  try {
+    if (!fs.existsSync(configPath)) {
+      throw new Error(`設定ファイルが存在しません: ${configPath}`);
+    }
+
+    const configContent = fs.readFileSync(configPath, 'utf-8');
+    const config = JSON.parse(configContent) as ShellCommandConfig;
+
+    // 必要なプロパティが存在するか確認
+    if (!config.allowCommands || !config.denyCommands || !config.allowedDirectories) {
+      throw new Error(`設定ファイルに必要なプロパティが存在しません: ${configPath}`);
+    }
+
+    // デフォルト値がない場合は設定
+    if (!config.defaultErrorMessage) {
+      config.defaultErrorMessage = 'このコマンドは許可リストに含まれていないため実行できません。';
+    }
+
+    if (!config.mergeMode) {
+      config.mergeMode = ConfigMergeMode.MERGE;
+    }
+
+    return config;
+  } catch (error) {
+    console.error(`Error loading config file: ${error}`);
+    throw error; // エラーを上位に伝播して処理を停止
+  }
 }
 
 /**
