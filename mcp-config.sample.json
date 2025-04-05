@@ -17,13 +17,11 @@
   "denyCommands": [
     {
       "command": "rm",
-      "message": "rm コマンドは危険なため使用できません。代わりにゴミ箱に移動するコマンドを使用してください",
-      "alternatives": ["trash", "gio trash"]
+      "message": "rm コマンドは危険なため使用できません。代わりにゴミ箱に移動するコマンドを使用してください"
     },
     {
       "command": "find",
-      "message": "findコマンドではなく、git grepを使用してください",
-      "alternatives": ["git grep"]
+      "message": "findコマンドではなく、git grepを使用してください"
     },
     {
       "command": "regex:.*sudo.*",

@@ -29,13 +29,11 @@ A sample configuration file is provided at `mcp-config.sample.json`.
   "denyCommands": [
     {
       "command": "rm",
-      "message": "rm command is dangerous. Please use trash command instead",
-      "alternatives": ["trash", "gio trash"]
+      "message": "rm command is dangerous. Please use trash command instead"
     },
     {
       "command": "find",
-      "message": "Use git grep instead of find",
-      "alternatives": ["git grep"]
+      "message": "Use git grep instead of find"
     },
     {
       "command": "regex:.*sudo.*",
@@ -65,9 +63,9 @@ A sample configuration file is provided at `mcp-config.sample.json`.
 
    - An array of strings or objects specifying denied commands
    - String values simply deny the command
-   - Object format with `command`, `message`, and optional `alternatives` array provides helpful feedback
+   - Object format with `command` and optional `message`
    - Supports regex patterns with `regex:` prefix for pattern matching
-   - Example: `{"command": "rm", "message": "Use trash instead", "alternatives": ["trash"]}`
+   - Example: `{"command": "rm", "message": "Use git rm instead"}`
 
 4. **defaultErrorMessage**: The default error message displayed when a command is not in the allowlist
 
