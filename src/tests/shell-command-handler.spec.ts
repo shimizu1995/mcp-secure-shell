@@ -1,16 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleShellCommand } from '../shell-command-handler.js';
 import * as commandValidator from '../command-validator.js';
-
+import * as directoryManager from '../directory-manager.js';
 describe('handleShellCommand', () => {
   beforeEach(() => {
     // Mock validateCommandWithArgs to allow the test command
     vi.spyOn(commandValidator, 'validateCommandWithArgs').mockReturnValue(true);
     // Mock findDenyCommandInBlacklist to return null (no blacklisted commands)
     vi.spyOn(commandValidator, 'findDenyCommandInBlacklist').mockReturnValue(null);
+    // Mock isDirectoryAllowed to return true for the test directory
+    vi.spyOn(directoryManager, 'isDirectoryAllowed').mockReturnValue(true);
+    // Mock setWorkingDirectory to prevent errors
+    vi.spyOn(directoryManager, 'setWorkingDirectory').mockImplementation((dir) => dir);
   });
   it('should execute a whitelisted command', async () => {
-    const result = await handleShellCommand('echo "test command execution"');
+    // Use a test directory path that will be allowed by our mock
+    const testDir = '/test-dir';
+    // Make sure working directory is mocked correctly
+    vi.spyOn(directoryManager, 'getWorkingDirectory').mockReturnValue(testDir);
+
+    const result = await handleShellCommand('echo "test command execution"', testDir);
 
     // Verify the expected output structure
     expect(result).toHaveProperty('content');
@@ -20,14 +29,24 @@ describe('handleShellCommand', () => {
   });
 
   it('should return an error for non-existent commands', async () => {
-    const result = await handleShellCommand('nonexistent-command');
+    // Use a test directory path that will be allowed by our mock
+    const testDir = '/test-dir';
+    // Make sure working directory is mocked correctly
+    vi.spyOn(directoryManager, 'getWorkingDirectory').mockReturnValue(testDir);
+
+    const result = await handleShellCommand('nonexistent-command', testDir);
 
     // Verify error is returned
     expect(result.content[0].text).toContain('Command not found');
   });
 
   it('should handle command with arguments correctly when command does not exist', async () => {
-    const result = await handleShellCommand('ssss -a -b --option=value');
+    // Use a test directory path that will be allowed by our mock
+    const testDir = '/test-dir';
+    // Make sure working directory is mocked correctly
+    vi.spyOn(directoryManager, 'getWorkingDirectory').mockReturnValue(testDir);
+
+    const result = await handleShellCommand('ssss -a -b --option=value', testDir);
 
     // Verify it only checks the base command existence
     expect(result.content[0].text).toContain('Command not found: ssss');
@@ -35,7 +54,12 @@ describe('handleShellCommand', () => {
 
   it('should handle execution errors gracefully', async () => {
     // Use a command that will fail (passing invalid argument to a file that likely doesn't exist)
-    const result = await handleShellCommand('cat /nonexistent_file_123456789');
+    // Use a test directory path that will be allowed by our mock
+    const testDir = '/test-dir';
+    // Make sure working directory is mocked correctly
+    vi.spyOn(directoryManager, 'getWorkingDirectory').mockReturnValue(testDir);
+
+    const result = await handleShellCommand('cat /nonexistent_file_123456789', testDir);
 
     // Verify error is returned and handled properly
     expect(result).toHaveProperty('content');
