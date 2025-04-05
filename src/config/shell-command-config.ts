@@ -64,7 +64,7 @@ export function getRegexFromPattern(pattern: string): RegExp {
  * デフォルトの設定を定義
  */
 export const DEFAULT_CONFIG: ShellCommandConfig = {
-  mergeMode: ConfigMergeMode.MERGE,
+  mergeMode: ConfigMergeMode.OVERWRITE,
   allowedDirectories: [],
   allowCommands: [
     // 基本的なファイル操作コマンド
