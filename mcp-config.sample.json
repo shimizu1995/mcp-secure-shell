@@ -42,6 +42,5 @@
       "message": "sudo is not allowed"
     }
   ],
-  "defaultErrorMessage": "this command is not allowed",
-  "mergeMode": "override"
+  "defaultErrorMessage": "this command is not allowed"
 }

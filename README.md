@@ -44,8 +44,7 @@ A sample configuration file is provided at `mcp-config.sample.json`.
       "message": "sudo commands are not allowed for security reasons"
     }
   ],
-  "defaultErrorMessage": "This command is not allowed. Please contact system administrator.",
-  "mergeMode": "merge"
+  "defaultErrorMessage": "This command is not allowed. Please contact system administrator."
 }
 ```
 
@@ -75,16 +74,6 @@ A sample configuration file is provided at `mcp-config.sample.json`.
    - Example: `{"command": "rm", "message": "Use git rm instead"}`
 
 4. **defaultErrorMessage**: The default error message displayed when a command is not in the allowlist
-
-5. **mergeMode**: Specifies how custom configuration is merged with the default configuration
-
-   - `"merge"`: Merges custom settings with default settings (default behavior)
-     - Adds custom allowed directories to the default list
-     - Adds custom allowed commands to the default list
-     - Adds custom denied commands to the default list
-   - `"overwrite"`: Completely replaces default settings with custom settings
-     - Uses only the custom allowed directories, commands, etc.
-     - Falls back to defaults only if a setting is not specified in the custom config
 
 ### Environment Variables
 

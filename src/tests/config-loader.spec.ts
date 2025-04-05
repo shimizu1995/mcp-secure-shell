@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as configLoader from '../config/config-loader.js';
 import { CONFIG_NOT_FOUND_ERROR } from '../config/config-loader.js';
-import { ConfigMergeMode, ShellCommandConfig } from '../config/shell-command-config.js';
+import { ShellCommandConfig } from '../config/shell-command-config.js';
 import fs from 'fs';
 import * as nodePath from 'path';
 
@@ -15,7 +15,6 @@ describe('Config Loader', () => {
     allowCommands: ['ls', 'pwd', 'cd'],
     denyCommands: ['rm', 'sudo'],
     defaultErrorMessage: '許可されていないコマンドです。',
-    mergeMode: ConfigMergeMode.MERGE,
   };
 
   beforeEach(() => {
@@ -107,14 +106,11 @@ describe('Config Loader', () => {
     expect(config).toHaveProperty('denyCommands');
     expect(config).toHaveProperty('allowedDirectories');
     expect(config).toHaveProperty('defaultErrorMessage');
-    expect(config).toHaveProperty('mergeMode');
-
     // 設定値が正しいか確認
     expect(config.allowCommands).toContain('ls');
     expect(config.denyCommands).toContain('rm');
     expect(config.allowedDirectories).toContain('/test-dir');
     expect(config.defaultErrorMessage).toBe('許可されていないコマンドです。');
-    expect(config.mergeMode).toBe(ConfigMergeMode.MERGE);
   });
 
   it('should get current config and reload it', () => {

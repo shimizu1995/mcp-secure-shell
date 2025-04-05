@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { ShellCommandConfig, ConfigMergeMode } from './shell-command-config.js';
+import { ShellCommandConfig } from './shell-command-config.js';
 
 /**
  * 設定ファイルが見つからない場合のエラーメッセージ
@@ -35,10 +35,6 @@ export function loadConfig(): ShellCommandConfig {
     // デフォルト値がない場合は設定
     if (!config.defaultErrorMessage) {
       config.defaultErrorMessage = 'このコマンドは許可リストに含まれていないため実行できません。';
-    }
-
-    if (!config.mergeMode) {
-      config.mergeMode = ConfigMergeMode.MERGE;
     }
 
     return config;

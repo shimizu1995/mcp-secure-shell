@@ -17,16 +17,6 @@ export type AllowCommand =
       denySubCommands?: string[];
     };
 
-/**
- * 設定のマージモード
- */
-export enum ConfigMergeMode {
-  /** デフォルト設定とカスタム設定をマージする（デフォルト） */
-  MERGE = 'merge',
-  /** カスタム設定が存在する場合は上書きする */
-  OVERWRITE = 'overwrite',
-}
-
 export interface ShellCommandConfig {
   /**
    * 許可されたディレクトリのリスト
@@ -37,12 +27,6 @@ export interface ShellCommandConfig {
   allowCommands: AllowCommand[];
   denyCommands: DenyCommand[];
   defaultErrorMessage: string;
-  /**
-   * 設定のマージモード
-   * - merge: デフォルト設定とカスタム設定をマージする（デフォルト）
-   * - overwrite: カスタム設定が存在する場合は上書きする
-   */
-  mergeMode?: ConfigMergeMode;
 }
 
 /**
