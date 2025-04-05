@@ -6,6 +6,7 @@ import {
   validateCommandWithArgs,
   findDenyCommandInBlacklist,
   getBlacklistErrorMessage,
+  getCommandName,
 } from '../command-validator.js';
 import { getConfig, reloadConfig } from '../config/config-loader.js';
 
@@ -40,6 +41,25 @@ describe('validateCommand', () => {
     expect(validateCommand('sudo')).toBe(false);
     expect(validateCommand('malicious-command')).toBe(false);
   });
+
+  it('should handle edge cases correctly', () => {
+    // Empty string and whitespace should be rejected
+    expect(validateCommand('')).toBe(false);
+    expect(validateCommand('   ')).toBe(false);
+  });
+
+  it('should handle case sensitivity appropriately', () => {
+    // Assuming commands are case-sensitive
+    expect(validateCommand('LS')).toBe(false);
+    expect(validateCommand('Echo')).toBe(false);
+    expect(validateCommand('GIT')).toBe(false);
+  });
+
+  it('should validate commands that are defined as objects in allowlist', () => {
+    // Git is defined as an object with subCommands in the test config
+    expect(validateCommand('git')).toBe(true);
+    expect(validateCommand('npm')).toBe(true);
+  });
 });
 
 describe('validateCommandWithArgs', () => {
@@ -55,6 +75,31 @@ describe('validateCommandWithArgs', () => {
 
   it('should reject unauthorized subcommands', () => {
     expect(validateCommandWithArgs('git danger-command')).toBe(false); // 許可されていないサブコマンド
+  });
+
+  it('should handle whitespace in commands properly', () => {
+    expect(validateCommandWithArgs('ls    -la')).toBe(true);
+    expect(validateCommandWithArgs('  ls -la  ')).toBe(true);
+    expect(validateCommandWithArgs('git    status')).toBe(true);
+  });
+
+  it('should allow all subcommands for string-only whitelist entries', () => {
+    // ls is defined as a string in the test config, so all subcommands should be allowed
+    expect(validateCommandWithArgs('ls -la')).toBe(true);
+    expect(validateCommandWithArgs('ls -ltr')).toBe(true);
+    expect(validateCommandWithArgs('ls --any-option')).toBe(true);
+  });
+
+  it('should handle complex command strings', () => {
+    // Command with multiple arguments
+    expect(validateCommandWithArgs('ls -la /tmp')).toBe(true);
+    // Command with options and arguments
+    expect(validateCommandWithArgs('git log --oneline -n 5')).toBe(true);
+  });
+
+  it('should handle empty or whitespace-only commands', () => {
+    expect(validateCommandWithArgs('')).toBe(false);
+    expect(validateCommandWithArgs('   ')).toBe(false);
   });
 });
 
@@ -152,6 +197,24 @@ describe('findDenyCommandInBlacklist', () => {
     if (sudoCommand && typeof sudoCommand === 'object') {
       expect(sudoCommand.command).toBe('regex:.*sudo.*');
     }
+  });
+});
+
+describe('getCommandName', () => {
+  it('should extract command name from string', () => {
+    expect(getCommandName('ls')).toBe('ls');
+    expect(getCommandName('git')).toBe('git');
+    expect(getCommandName('npm')).toBe('npm');
+  });
+
+  it('should extract command name from object with command property', () => {
+    expect(getCommandName({ command: 'git' })).toBe('git');
+    expect(getCommandName({ command: 'npm' })).toBe('npm');
+  });
+
+  it('should extract command name from object with command and subCommands properties', () => {
+    expect(getCommandName({ command: 'git', subCommands: ['status', 'log'] })).toBe('git');
+    expect(getCommandName({ command: 'npm', subCommands: ['install', 'run'] })).toBe('npm');
   });
 });
 
