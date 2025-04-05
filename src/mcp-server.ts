@@ -2,10 +2,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { handleShellCommand } from './shell-command-handler.js';
 
-const RUN_COMMAND_DESCRIPTION = `Run a shell command in a specified directory.
-Commands are executed in the last specified directory until a new one is provided.
-Only directories within allowed paths can be specified.
-When specifying a directory with the "directory" parameter, you don't need to use the "cd" command as the working directory is automatically set.`;
+const RUN_COMMAND_DESCRIPTION = `Run shell commands in specific directories (only within allowed paths).
+The "directory" parameter sets the working directory automatically; "cd" command isn't needed.`;
 
 export const createMcpServer = async () => {
   // Create an MCP server
@@ -28,12 +26,7 @@ export const createMcpServer = async () => {
     RUN_COMMAND_DESCRIPTION,
     {
       command: z.string(),
-      directory: z
-        .string()
-        .optional()
-        .describe(
-          'Working directory to execute the command in. Must be within allowed directories.'
-        ),
+      directory: z.string().describe(`Working directory to execute the command in.`),
     },
     async ({ command, directory }) => await handleShellCommand(command, directory)
   );
