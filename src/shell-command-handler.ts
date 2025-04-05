@@ -7,32 +7,9 @@ import {
   findDenyCommandInBlacklist,
   getBlacklistErrorMessage,
 } from './command-validator.js';
-import {
-  getWorkingDirectory,
-  setWorkingDirectory,
-  parseAllowedDirectories,
-  refreshAllowedDirectories,
-  getAllowedDirectoriesFromConfig,
-  getAllowedDirectories,
-  isDirectoryAllowed,
-} from './directory-manager.js';
+import { getWorkingDirectory, setWorkingDirectory } from './directory-manager.js';
 
-// Re-export functions from other modules to maintain backward compatibility
-export {
-  parseAllowedDirectories,
-  refreshAllowedDirectories,
-  getAllowedDirectoriesFromConfig,
-  getAllowedDirectories,
-  isDirectoryAllowed,
-  setWorkingDirectory,
-  getWorkingDirectory,
-};
-export {
-  validateCommand,
-  validateCommandWithArgs,
-  findDenyCommandInBlacklist,
-  getBlacklistErrorMessage,
-} from './command-validator.js';
+// No re-exports - functions should be imported directly from their respective modules
 
 type HandlerReturnType = {
   content: {
