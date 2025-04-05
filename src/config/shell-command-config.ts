@@ -14,6 +14,7 @@ export type AllowCommand =
   | {
       command: string;
       subCommands?: string[];
+      denySubCommands?: string[];
     };
 
 /**
@@ -113,7 +114,9 @@ export const DEFAULT_CONFIG: ShellCommandConfig = {
     },
     {
       command: 'npm',
-      subCommands: ['run', 'install', 'ci', 'test'],
+      // If no subCommands is provided, all subcommands are allowed by default
+      // except those listed in denySubCommands
+      denySubCommands: ['install', 'uninstall', 'update', 'audit'],
     },
   ],
   denyCommands: [

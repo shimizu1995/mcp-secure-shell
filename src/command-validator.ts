@@ -53,14 +53,23 @@ export function validateCommandWithArgs(command: string): boolean {
     return true;
   }
 
-  // オブジェクト形式でsubCommandsがある場合
-  if (matchedCommand.subCommands && parts.length > 1) {
+  // サブコマンドが指定されている場合の処理
+  if (parts.length > 1) {
     const subCommand = parts[1];
-    return matchedCommand.subCommands.includes(subCommand);
+
+    // denySubCommands が指定されている場合、そのリストに含まれるサブコマンドは拒否
+    if (matchedCommand.denySubCommands && matchedCommand.denySubCommands.includes(subCommand)) {
+      return false;
+    }
+
+    // subCommands が指定されている場合、そのリストに含まれるサブコマンドのみ許可
+    if (matchedCommand.subCommands) {
+      return matchedCommand.subCommands.includes(subCommand);
+    }
   }
 
-  // オブジェクト形式だがsubCommandsがない場合、または
-  // サブコマンドが指定されていない場合は許可
+  // サブコマンドが指定されていない場合、またはsubCommandsとdenySubCommandsのどちらも
+  // 指定されていない場合は許可
   return true;
 }
 

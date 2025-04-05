@@ -77,6 +77,19 @@ describe('validateCommandWithArgs', () => {
     expect(validateCommandWithArgs('git danger-command')).toBe(false); // 許可されていないサブコマンド
   });
 
+  it('should reject denied subcommands', () => {
+    // NPMのInstallやUninstallなどは拒否リストに入っている
+    expect(validateCommandWithArgs('npm install')).toBe(false);
+    expect(validateCommandWithArgs('npm uninstall')).toBe(false);
+    expect(validateCommandWithArgs('npm update')).toBe(false);
+    expect(validateCommandWithArgs('npm audit')).toBe(false);
+
+    // 拒否リストに入っていないサブコマンドは許可される
+    expect(validateCommandWithArgs('npm run')).toBe(true);
+    expect(validateCommandWithArgs('npm test')).toBe(true);
+    expect(validateCommandWithArgs('npm ci')).toBe(true);
+  });
+
   it('should handle whitespace in commands properly', () => {
     expect(validateCommandWithArgs('ls    -la')).toBe(true);
     expect(validateCommandWithArgs('  ls -la  ')).toBe(true);
