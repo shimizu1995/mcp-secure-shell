@@ -28,20 +28,3 @@ export interface ShellCommandConfig {
   denyCommands: DenyCommand[];
   defaultErrorMessage: string;
 }
-
-/**
- * コマンドが正規表現パターンかどうかを判定
- */
-export function isRegexPattern(command: string): boolean {
-  return command.startsWith('regex:');
-}
-
-/**
- * 正規表現パターンからRegExpオブジェクトを作成
- */
-export function getRegexFromPattern(pattern: string): RegExp {
-  const regexStr = pattern.substring('regex:'.length);
-  return new RegExp(regexStr);
-}
-
-// デフォルト設定は削除され、ユーザーが指定した設定のみを使用します

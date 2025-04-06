@@ -38,7 +38,7 @@
       "message": "Run `git ls-tree` command or `git ls-files` command instead of `find` command"
     },
     {
-      "command": "regex:.*sudo.*",
+      "command": "sudo",
       "message": "sudo is not allowed"
     }
   ],

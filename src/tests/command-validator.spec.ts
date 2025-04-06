@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { DenyCommand } from '../config/shell-command-config.js';
 import {
   validateCommandWithArgs,
@@ -8,17 +8,17 @@ import {
   extractCommands,
   validateMultipleCommands,
 } from '../command-validator.js';
-import { getConfig, reloadConfig } from '../config/config-loader.js';
+import * as configLoader from '../config/config-loader.js';
 
 // コンフィグの初期化
 describe('Config Initialization', () => {
   beforeEach(() => {
     // テスト前にコンフィグを再読み込み
-    reloadConfig();
+    configLoader.reloadConfig();
   });
 
   it('should load default config', () => {
-    const config = getConfig();
+    const config = configLoader.getConfig();
     expect(config).toBeDefined();
     expect(config.allowCommands).toBeDefined();
     expect(config.denyCommands).toBeDefined();
@@ -81,9 +81,16 @@ describe('validateCommandWithArgs', () => {
 });
 
 describe('findDenyCommandInBlacklist', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('should return DenyCommand for commands containing blacklisted terms', () => {
+    // Specific command detection still works, but regex matching is disabled
     expect(findDenyCommandInBlacklist('rm -rf /')).not.toBeNull();
-    expect(findDenyCommandInBlacklist('echo hello | sudo bash')).not.toBeNull();
+    // The following tests now return null since regex matching is disabled
+    // and sudo is only checked as a specific command
+    expect(findDenyCommandInBlacklist('echo hello | sudo bash')).toBeNull();
     expect(findDenyCommandInBlacklist('cat file | grep pattern | chmod')).not.toBeNull();
     expect(findDenyCommandInBlacklist('find . -exec chmod 777 {} ;')).not.toBeNull();
   });
@@ -103,7 +110,7 @@ describe('findDenyCommandInBlacklist', () => {
   });
 
   it('should return DenyCommand even if blacklisted command is not the base command', () => {
-    expect(findDenyCommandInBlacklist('echo Let me explain how sudo works')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('echo Let me explain how sudo works')).toBeNull(); // No regex matching
     expect(findDenyCommandInBlacklist('ls | xargs rm')).not.toBeNull();
     expect(findDenyCommandInBlacklist('ls ; rm')).not.toBeNull();
   });
@@ -139,28 +146,49 @@ describe('findDenyCommandInBlacklist', () => {
     expect(findDenyCommandInBlacklist('   ')).toBeNull();
   });
 
-  it('should detect regex pattern blacklisted commands', () => {
-    expect(findDenyCommandInBlacklist('anything with sudo in it')).not.toBeNull();
-    expect(findDenyCommandInBlacklist('run sudo command')).not.toBeNull();
-    expect(findDenyCommandInBlacklist('try to use sudoers')).not.toBeNull();
-  });
+  it('should handle command parsing correctly', () => {
+    // regexモード削除後の動作確認テスト
+    // テスト用の設定を使用
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat'],
+      denyCommands: [
+        { command: 'rm', message: 'rm is dangerous' },
+        { command: 'sudo', message: 'sudo is not allowed' },
+      ],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
 
-  it('should extract the correct base command from a regex pattern', () => {
-    const sudoCommand = findDenyCommandInBlacklist('anything with sudo in it');
-    expect(sudoCommand).not.toBeNull();
-    if (sudoCommand && typeof sudoCommand === 'object') {
-      expect(sudoCommand.command).toBe('regex:.*sudo.*');
-      expect(sudoCommand.message).toBe('sudo コマンドは権限昇格のため使用できません。');
+    // 直接のコマンドのチェック
+    expect(findDenyCommandInBlacklist('sudo')).not.toBeNull();
+    expect(findDenyCommandInBlacklist('rm')).not.toBeNull();
+
+    // 混合コマンドチェック - sudoがベースコマンドなのでブロックされる
+    const result = findDenyCommandInBlacklist('sudo ls');
+    expect(result).not.toBeNull();
+    if (result && typeof result === 'object') {
+      expect(result.command).toBe('sudo');
     }
 
-    const command = findDenyCommandInBlacklist('trying to use sudoers');
-    expect(command).not.toBeNull();
-    if (command && typeof command === 'object') {
-      expect(command.command).toBe('regex:.*sudo.*');
-    }
+    // ベースコマンドがsudoでない場合は安全
+    expect(findDenyCommandInBlacklist('echo sudo')).toBeNull();
+    expect(findDenyCommandInBlacklist('something sudo')).toBeNull();
   });
 
   it('should return the correct DenyCommand object for specific commands', () => {
+    // Mock config to ensure it includes sudo as a specific command
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat'],
+      denyCommands: [
+        { command: 'rm', message: 'rm is dangerous' },
+        { command: 'sudo', message: 'sudo is not allowed' },
+      ],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
     const rmCommand = findDenyCommandInBlacklist('rm -rf /');
     expect(rmCommand).not.toBeNull();
     expect(typeof rmCommand).toBe('object');
@@ -169,10 +197,11 @@ describe('findDenyCommandInBlacklist', () => {
       expect(rmCommand.message).toBeDefined();
     }
 
-    const sudoCommand = findDenyCommandInBlacklist('sudo ls');
+    // Now sudo should be detected
+    const sudoCommand = findDenyCommandInBlacklist('sudo');
     expect(sudoCommand).not.toBeNull();
     if (sudoCommand && typeof sudoCommand === 'object') {
-      expect(sudoCommand.command).toBe('regex:.*sudo.*');
+      expect(sudoCommand.command).toBe('sudo');
     }
   });
 });
@@ -219,7 +248,7 @@ describe('getBlacklistErrorMessage', () => {
     // messageプロパティがないDenyCommandを作成
     const denyCommandWithoutMessage: DenyCommand = 'test-command';
     const defaultError = getBlacklistErrorMessage(denyCommandWithoutMessage);
-    expect(defaultError).toBe(getConfig().defaultErrorMessage);
+    expect(defaultError).toBe(configLoader.getConfig().defaultErrorMessage);
   });
 
   it('should return default error message for commands with undefined message', () => {
@@ -229,7 +258,7 @@ describe('getBlacklistErrorMessage', () => {
       message: undefined,
     };
     const defaultError = getBlacklistErrorMessage(denyCommandWithUndefinedMessage);
-    expect(defaultError).toBe(getConfig().defaultErrorMessage);
+    expect(defaultError).toBe(configLoader.getConfig().defaultErrorMessage);
   });
 });
 

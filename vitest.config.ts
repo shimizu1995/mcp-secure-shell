@@ -6,6 +6,7 @@ export default defineConfig({
     include: ['**/*.spec.ts'],
     exclude: ['node_modules/**', 'build/**'],
     globals: true,
+    silent: true,
     typecheck: {
       enabled: true,
       ignoreSourceErrors: false,

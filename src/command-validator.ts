@@ -1,5 +1,5 @@
 import { getConfig } from './config/config-loader.js';
-import { isRegexPattern, getRegexFromPattern, DenyCommand } from './config/shell-command-config.js';
+import { DenyCommand } from './config/shell-command-config.js';
 
 // シェル演算子の正規表現パターン
 const SHELL_OPERATORS_REGEX = /([;|&]|&&|\|\||\(|\)|\{|\})/g;
@@ -84,17 +84,6 @@ export function findDenyCommandInBlacklist(command: string): DenyCommand | null 
   const config = getConfig();
   const trimmedCommand = command.trim();
 
-  // 正規表現パターンとのマッチングをチェック（コマンド全体を対象）
-  for (const denyCmd of config.denyCommands) {
-    const cmdName = getDenyCommandName(denyCmd);
-    if (isRegexPattern(cmdName)) {
-      const regex = getRegexFromPattern(cmdName);
-      if (regex.test(trimmedCommand)) {
-        return denyCmd;
-      }
-    }
-  }
-
   // コマンドを実行可能な単位で分割してチェック
   // パイプやセミコロンで分割された個々のコマンドを処理
   const commandParts = trimmedCommand.split(/[|;]/);
@@ -110,7 +99,7 @@ export function findDenyCommandInBlacklist(command: string): DenyCommand | null 
     // 基本コマンドがブラックリストに含まれているかチェック
     const blacklistedCmd = config.denyCommands.find((denyCmd) => {
       const cmdName = getDenyCommandName(denyCmd);
-      return !isRegexPattern(cmdName) && cmdName === baseCommand;
+      return cmdName === baseCommand;
     });
 
     if (blacklistedCmd) {
@@ -124,7 +113,7 @@ export function findDenyCommandInBlacklist(command: string): DenyCommand | null 
         const arg = partWords[i];
         const blacklistedArg = config.denyCommands.find((denyCmd) => {
           const cmdName = getDenyCommandName(denyCmd);
-          return !isRegexPattern(cmdName) && cmdName === arg;
+          return cmdName === arg;
         });
 
         if (blacklistedArg) {

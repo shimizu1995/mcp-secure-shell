@@ -40,7 +40,7 @@ A sample configuration file is provided at `mcp-config.sample.json`.
       "message": "Use git grep instead of find"
     },
     {
-      "command": "regex:.*sudo.*",
+      "command": "sudo",
       "message": "sudo commands are not allowed for security reasons"
     }
   ],
@@ -70,7 +70,6 @@ A sample configuration file is provided at `mcp-config.sample.json`.
    - An array of strings or objects specifying denied commands
    - String values simply deny the command
    - Object format with `command` and optional `message`
-   - Supports regex patterns with `regex:` prefix for pattern matching
    - Example: `{"command": "rm", "message": "Use git rm instead"}`
 
 4. **defaultErrorMessage**: The default error message displayed when a command is not in the allowlist
