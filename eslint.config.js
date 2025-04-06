@@ -14,6 +14,19 @@ export default defineConfig([
   { files: ['**/*.{js,mjs,cjs,ts}'], plugins: { js }, extends: ['js/recommended'] },
   tseslint.configs.recommended,
   {
+    files: ['**/*.ts'],
+    ignores: ['**/*.test.ts', '**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/consistent-type-assertions': [
+        'error',
+        {
+          assertionStyle: 'never',
+        },
+      ],
+    },
+  },
+
+  {
     ignores: ['**/node_modules/**', '**/dist/**', '**/build/**'],
   },
 ]);

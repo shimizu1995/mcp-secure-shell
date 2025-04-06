@@ -25,7 +25,7 @@ export function loadConfig(): ShellCommandConfig {
     }
 
     const configContent = fs.readFileSync(configPath, 'utf-8');
-    const config = JSON.parse(configContent) as ShellCommandConfig;
+    const config: ShellCommandConfig = JSON.parse(configContent);
 
     // 必要なプロパティが存在するか確認
     if (!config.allowCommands || !config.denyCommands || !config.allowedDirectories) {
