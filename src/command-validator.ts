@@ -4,12 +4,32 @@ import { DenyCommand } from './config/shell-command-config.js';
 // シェル演算子の正規表現パターン
 const SHELL_OPERATORS_REGEX = /([;|&]|&&|\|\||\(|\)|\{|\})/g;
 
+// 出力リダイレクトの正規表現パターン
+const OUTPUT_REDIRECTION_REGEX = /(\s+>>|\s+>)(?![^"']*["']\s*$)/g;
+
 // コマンド置換の正規表現パターン
 const COMMAND_SUBSTITUTION_REGEX = /\$\([^)]+\)/g;
 
 /**
  * コマンド文字列から基本コマンドを取得する
  */
+
+/**
+ * コマンド文字列に出力リダイレクトが含まれているかチェックする
+ * @param commandString 検証するコマンド文字列
+ * @returns 出力リダイレクトが含まれている場合はエラーメッセージ、含まれていない場合はnull
+ */
+export function checkForOutputRedirection(commandString: string): string | null {
+  // 引用符内のリダイレクト記号を無視し、コマンド内の実際のリダイレクトを検出
+  const matches = commandString.match(OUTPUT_REDIRECTION_REGEX);
+
+  if (matches) {
+    const redirectionType = matches[0].includes('>>') ? 'append' : 'overwrite';
+    return `Output redirection is not allowed. ${redirectionType} redirection operator (${matches[0]}) detected.`;
+  }
+
+  return null;
+}
 export function getCommandName(
   commandStr: string | { command: string; subCommands?: string[] }
 ): string {
@@ -173,6 +193,17 @@ export function extractCommands(commandString: string): string[] {
  * @returns 検証結果
  */
 export function validateMultipleCommands(commandString: string): ValidationResult {
+  // リダイレクトチェックを先に行う
+  const redirectionError = checkForOutputRedirection(commandString);
+  if (redirectionError) {
+    return {
+      isValid: false,
+      baseCommand: '',
+      command: commandString,
+      message: redirectionError,
+    };
+  }
+
   // 個々のコマンドを抽出
   const commands = extractCommands(commandString);
 
@@ -192,6 +223,17 @@ export function validateMultipleCommands(commandString: string): ValidationResul
 
   // 各コマンドが許可リストに含まれているか検証
   for (const cmd of commandsToCheck) {
+    // 各コマンドにもリダイレクトチェックを適用
+    const cmdRedirectionError = checkForOutputRedirection(cmd);
+    if (cmdRedirectionError) {
+      return {
+        isValid: false,
+        baseCommand: '',
+        command: cmd,
+        message: cmdRedirectionError,
+      };
+    }
+
     const result = validateCommandWithArgs(cmd);
     if (!result.isValid) {
       return result;

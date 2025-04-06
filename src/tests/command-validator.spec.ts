@@ -4,6 +4,7 @@ import {
   getCommandName,
   extractCommands,
   validateMultipleCommands,
+  checkForOutputRedirection,
 } from '../command-validator.js';
 import * as configLoader from '../config/config-loader.js';
 
@@ -258,6 +259,77 @@ describe('extractCommands', () => {
   });
 });
 
+describe('OUTPUT_REDIRECTION_REGEX', () => {
+  // We need to import/access the regex pattern directly from the module
+  // Since it's a private constant, we'll test it via the checkForOutputRedirection function
+
+  it('should match single > redirection operator', () => {
+    expect(checkForOutputRedirection('ls > file.txt')).not.toBeNull();
+    expect(checkForOutputRedirection('echo hello > output.txt')).not.toBeNull();
+  });
+
+  it('should match >> redirection operator', () => {
+    expect(checkForOutputRedirection('ls >> file.txt')).not.toBeNull();
+    expect(checkForOutputRedirection('echo hello >> output.txt')).not.toBeNull();
+  });
+
+  it('should not match redirection symbols inside quotes', () => {
+    expect(checkForOutputRedirection('echo "This > is a test"')).toBeNull();
+    expect(checkForOutputRedirection("echo 'Symbol >> in quotes'")).toBeNull();
+  });
+
+  it('should match multiple redirection operators in a command', () => {
+    expect(checkForOutputRedirection('cat file.txt > out1.txt > out2.txt')).not.toBeNull();
+  });
+
+  it('should match redirection at the end of a command', () => {
+    expect(checkForOutputRedirection('cat file.txt >')).not.toBeNull();
+  });
+
+  it('should match redirection when combined with other shell operators', () => {
+    expect(checkForOutputRedirection('grep pattern file.txt | sort > output.txt')).not.toBeNull();
+    expect(checkForOutputRedirection('cat file.txt && echo "done" > log.txt')).not.toBeNull();
+  });
+
+  it('should not match > character when used as part of an argument or option', () => {
+    expect(checkForOutputRedirection('cat file.txt -name=file>1')).toBeNull();
+    expect(checkForOutputRedirection('find . -name "test>file.txt"')).toBeNull();
+  });
+});
+
+describe('checkForOutputRedirection', () => {
+  it('should detect output redirection with > operator', () => {
+    const result = checkForOutputRedirection('ls > file.txt');
+    expect(result).not.toBeNull();
+    expect(result).toContain('Output redirection is not allowed');
+    expect(result).toContain('overwrite redirection');
+  });
+
+  it('should detect output redirection with >> operator', () => {
+    const result = checkForOutputRedirection('echo "hello" >> file.txt');
+    expect(result).not.toBeNull();
+    expect(result).toContain('Output redirection is not allowed');
+    expect(result).toContain('append redirection');
+  });
+
+  it('should not detect redirection symbols inside quotes', () => {
+    const result = checkForOutputRedirection('echo "This is a > symbol"');
+    expect(result).toBeNull();
+  });
+
+  it('should handle multiple redirection symbols in a command', () => {
+    const result = checkForOutputRedirection('cat file.txt > output.txt > another.txt');
+    expect(result).not.toBeNull();
+    expect(result).toContain('Output redirection is not allowed');
+  });
+
+  it('should handle redirection combined with pipes', () => {
+    const result = checkForOutputRedirection('cat file.txt | grep pattern > output.txt');
+    expect(result).not.toBeNull();
+    expect(result).toContain('Output redirection is not allowed');
+  });
+});
+
 describe('validateMultipleCommands', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -416,5 +488,25 @@ describe('validateMultipleCommands', () => {
 
     const result2 = validateMultipleCommands('(ls -la; rm -rf /; echo test)');
     expect(result2.isValid).toBe(false);
+  });
+
+  it('should reject commands with output redirection', () => {
+    const result1 = validateMultipleCommands('ls > file.txt');
+    expect(result1.isValid).toBe(false);
+    expect(result1.message).toContain('Output redirection is not allowed');
+
+    const result2 = validateMultipleCommands('echo "hello" >> log.txt');
+    expect(result2.isValid).toBe(false);
+    expect(result2.message).toContain('Output redirection is not allowed');
+  });
+
+  it('should reject commands with output redirection in complex expressions', () => {
+    const result1 = validateMultipleCommands('cat file.txt | grep pattern > output.txt');
+    expect(result1.isValid).toBe(false);
+    expect(result1.message).toContain('Output redirection is not allowed');
+
+    const result2 = validateMultipleCommands('find . -name "*.txt" -exec cat {} ; > results.txt');
+    expect(result2.isValid).toBe(false);
+    expect(result2.message).toContain('Output redirection is not allowed');
   });
 });
