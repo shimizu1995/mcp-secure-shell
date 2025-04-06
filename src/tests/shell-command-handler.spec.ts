@@ -2,10 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleShellCommand } from '../shell-command-handler.js';
 import * as commandValidator from '../command-validator.js';
 import * as directoryManager from '../directory-manager.js';
+
 describe('handleShellCommand', () => {
   beforeEach(() => {
     // Mock validateCommandWithArgs to allow the test command
     vi.spyOn(commandValidator, 'validateCommandWithArgs').mockReturnValue(true);
+    // Mock validateMultipleCommands to allow multiple commands by default
+    vi.spyOn(commandValidator, 'validateMultipleCommands').mockReturnValue(true);
     // Mock findDenyCommandInBlacklist to return null (no blacklisted commands)
     vi.spyOn(commandValidator, 'findDenyCommandInBlacklist').mockReturnValue(null);
     // Mock isDirectoryAllowed to return true for the test directory
@@ -67,5 +70,34 @@ describe('handleShellCommand', () => {
     expect(result.content[0]).toHaveProperty('mimeType', 'text/plain');
     // The exact error message will depend on the OS, but should contain some error text
     expect(result.content[0].text).toBeTruthy();
+  });
+
+  it('should execute valid multi-command inputs', async () => {
+    // Use a test directory path that will be allowed by our mock
+    const testDir = '/test-dir';
+    // Make sure working directory is mocked correctly
+    vi.spyOn(directoryManager, 'getWorkingDirectory').mockReturnValue(testDir);
+
+    const result = await handleShellCommand('echo "first" && echo "second"', testDir);
+
+    // Verify we get the expected output
+    expect(result).toHaveProperty('content');
+    expect(result.content[0]).toHaveProperty('type', 'text');
+    expect(result.content[0].text).toContain('first');
+    expect(result.content[0].text).toContain('second');
+  });
+
+  it('should reject disallowed commands in multi-command sequences', async () => {
+    // Use a test directory path that will be allowed by our mock
+    const testDir = '/test-dir';
+    // Mock validateMultipleCommands to reject this command
+    vi.spyOn(commandValidator, 'validateMultipleCommands').mockReturnValue(false);
+
+    const result = await handleShellCommand('echo "first" && forbidden-command', testDir);
+
+    // Verify error is returned
+    expect(result.content[0].text).toContain(
+      'One or more commands in the sequence are not allowed'
+    );
   });
 });

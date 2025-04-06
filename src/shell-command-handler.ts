@@ -3,6 +3,7 @@ import { sync as commandExistsSync } from 'command-exists';
 
 import {
   validateCommandWithArgs,
+  validateMultipleCommands,
   findDenyCommandInBlacklist,
   getBlacklistErrorMessage,
 } from './command-validator.js';
@@ -46,6 +47,11 @@ export async function handleShellCommand(
     // コマンドが許可リストに含まれているか確認
     if (!validateCommandWithArgs(command)) {
       throw new Error(`Command not allowed: ${baseCommand}`);
+    }
+
+    // 複数コマンドの場合、すべてのコマンドが許可リストに含まれているか確認
+    if (!validateMultipleCommands(command)) {
+      throw new Error(`One or more commands in the sequence are not allowed`);
     }
 
     // コマンド実行

@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DenyCommand } from '../config/shell-command-config.js';
 import {
-  validateCommand,
   validateCommandWithArgs,
   findDenyCommandInBlacklist,
   getBlacklistErrorMessage,
   getCommandName,
+  extractCommands,
+  validateMultipleCommands,
 } from '../command-validator.js';
 import { getConfig, reloadConfig } from '../config/config-loader.js';
 
@@ -22,39 +23,6 @@ describe('Config Initialization', () => {
     expect(config.allowCommands).toBeDefined();
     expect(config.denyCommands).toBeDefined();
     expect(config.defaultErrorMessage).toBeDefined();
-  });
-});
-
-describe('validateCommand', () => {
-  it('should return true for whitelisted commands', () => {
-    expect(validateCommand('ls')).toBe(true);
-    expect(validateCommand('cat')).toBe(true);
-    expect(validateCommand('echo')).toBe(true);
-  });
-
-  it('should return false for non-whitelisted commands', () => {
-    expect(validateCommand('nonexistent-command')).toBe(false);
-    expect(validateCommand('sudo')).toBe(false);
-    expect(validateCommand('malicious-command')).toBe(false);
-  });
-
-  it('should handle edge cases correctly', () => {
-    // Empty string and whitespace should be rejected
-    expect(validateCommand('')).toBe(false);
-    expect(validateCommand('   ')).toBe(false);
-  });
-
-  it('should handle case sensitivity appropriately', () => {
-    // Assuming commands are case-sensitive
-    expect(validateCommand('LS')).toBe(false);
-    expect(validateCommand('Echo')).toBe(false);
-    expect(validateCommand('GIT')).toBe(false);
-  });
-
-  it('should validate commands that are defined as objects in allowlist', () => {
-    // Git is defined as an object with subCommands in the test config
-    expect(validateCommand('git')).toBe(true);
-    expect(validateCommand('npm')).toBe(true);
   });
 });
 
@@ -262,5 +230,120 @@ describe('getBlacklistErrorMessage', () => {
     };
     const defaultError = getBlacklistErrorMessage(denyCommandWithUndefinedMessage);
     expect(defaultError).toBe(getConfig().defaultErrorMessage);
+  });
+});
+
+describe('extractCommands', () => {
+  it('should extract commands separated by semicolons', () => {
+    const input = 'ls -la; cat file.txt; echo test';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls -la');
+    expect(commands).toContain('cat file.txt');
+    expect(commands).toContain('echo test');
+    // 個々のコマンドを3つ抽出
+    expect(commands.length).toBe(3);
+  });
+
+  it('should extract commands separated by pipe', () => {
+    const input = 'cat file.txt | grep pattern | wc -l';
+    const commands = extractCommands(input);
+    expect(commands).toContain('cat file.txt');
+    expect(commands).toContain('grep pattern');
+    expect(commands).toContain('wc -l');
+    expect(commands.length).toBe(3); // 3つのコマンドを抽出
+  });
+
+  it('should extract commands separated by AND operator', () => {
+    const input = 'mkdir test && cd test && touch file.txt';
+    const commands = extractCommands(input);
+    expect(commands).toContain('mkdir test');
+    expect(commands).toContain('cd test');
+    expect(commands).toContain('touch file.txt');
+    expect(commands.length).toBe(3); // 3つのコマンドを抽出
+  });
+
+  it('should extract commands separated by OR operator', () => {
+    const input = 'ls nonexistent || echo "Not found"';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls nonexistent');
+    expect(commands).toContain('echo "Not found"');
+    expect(commands.length).toBe(2); // 2つのコマンドを抽出
+  });
+
+  it('should extract commands from command substitution', () => {
+    const input = 'echo $(date)';
+    const commands = extractCommands(input);
+    // コマンド置換は置換後の形式で返される
+    expect(commands).toContain('echo __SUBST0__');
+    expect(commands).toContain('date');
+    expect(commands.length).toBe(2); // 2つのコマンドを抽出
+  });
+
+  it('should extract commands from complex combinations', () => {
+    const input = 'ls -la | grep .js && echo $(date) || echo "failed"';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls -la');
+    expect(commands).toContain('grep .js');
+    // コマンド置換は置換後の形式で返される
+    expect(commands).toContain('echo __SUBST0__');
+    expect(commands).toContain('date');
+    expect(commands).toContain('echo "failed"');
+    expect(commands.length).toBe(5); // 5つのコマンドを抽出
+  });
+
+  it('should handle brace groups', () => {
+    const input = '{ ls -la; echo test; }';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls -la');
+    expect(commands).toContain('echo test');
+    expect(commands.length).toBe(2); // 2つのコマンドを抽出
+  });
+
+  it('should handle parenthesis groups', () => {
+    const input = '(ls -la; echo test)';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls -la');
+    expect(commands).toContain('echo test');
+    expect(commands.length).toBe(2); // 2つのコマンドを抽出
+  });
+});
+
+describe('validateMultipleCommands', () => {
+  it('should return true when all commands in a sequence are allowed', () => {
+    // Assuming ls, cat, and echo are in the allowlist
+    expect(validateMultipleCommands('ls -la; cat file.txt; echo test')).toBe(true);
+  });
+
+  it('should return false when any command in a sequence is not allowed', () => {
+    // Assuming rm is blacklisted
+    expect(validateMultipleCommands('ls -la; rm -rf /; echo test')).toBe(false);
+  });
+
+  it('should return true for simple allowed commands', () => {
+    expect(validateMultipleCommands('ls -la')).toBe(true);
+  });
+
+  it('should validate commands with pipes', () => {
+    expect(validateMultipleCommands('cat file.txt | grep pattern')).toBe(true);
+  });
+
+  it('should validate commands with command substitution', () => {
+    expect(validateMultipleCommands('echo $(date)')).toBe(true);
+  });
+
+  it('should validate complex command combinations', () => {
+    expect(validateMultipleCommands('ls -la | grep .js && echo $(date) || echo "failed"')).toBe(
+      true
+    );
+  });
+
+  it('should reject if command substitution contains disallowed commands', () => {
+    // Assuming rm is blacklisted
+    expect(validateMultipleCommands('echo $(rm -rf /)')).toBe(false);
+  });
+
+  it('should handle brace and parenthesis groups', () => {
+    expect(validateMultipleCommands('{ ls -la; echo test; }')).toBe(true);
+    expect(validateMultipleCommands('(ls -la; echo test)')).toBe(true);
   });
 });
