@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { DenyCommand } from '../config/shell-command-config.js';
 import {
   validateCommandWithArgs,
-  findDenyCommandInBlacklist,
-  getBlacklistErrorMessage,
   getCommandName,
   extractCommands,
   validateMultipleCommands,
@@ -27,184 +24,146 @@ describe('Config Initialization', () => {
 });
 
 describe('validateCommandWithArgs', () => {
-  it('should validate commands with arguments', () => {
-    expect(validateCommandWithArgs('ls -la')).toBe(true);
-    expect(validateCommandWithArgs('git status')).toBe(true);
-  });
-
-  it('should validate subcommands based on configuration', () => {
-    expect(validateCommandWithArgs('git status')).toBe(true); // 許可されたサブコマンド
-    expect(validateCommandWithArgs('npm run')).toBe(true); // 許可されたサブコマンド
-  });
-
-  it('should reject unauthorized subcommands', () => {
-    expect(validateCommandWithArgs('git danger-command')).toBe(false); // 許可されていないサブコマンド
-  });
-
-  it('should reject denied subcommands', () => {
-    // NPMのInstallやUninstallなどは拒否リストに入っている
-    expect(validateCommandWithArgs('npm install')).toBe(false);
-    expect(validateCommandWithArgs('npm uninstall')).toBe(false);
-    expect(validateCommandWithArgs('npm update')).toBe(false);
-    expect(validateCommandWithArgs('npm audit')).toBe(false);
-
-    // 拒否リストに入っていないサブコマンドは許可される
-    expect(validateCommandWithArgs('npm run')).toBe(true);
-    expect(validateCommandWithArgs('npm test')).toBe(true);
-    expect(validateCommandWithArgs('npm ci')).toBe(true);
-  });
-
-  it('should handle whitespace in commands properly', () => {
-    expect(validateCommandWithArgs('ls    -la')).toBe(true);
-    expect(validateCommandWithArgs('  ls -la  ')).toBe(true);
-    expect(validateCommandWithArgs('git    status')).toBe(true);
-  });
-
-  it('should allow all subcommands for string-only whitelist entries', () => {
-    // ls is defined as a string in the test config, so all subcommands should be allowed
-    expect(validateCommandWithArgs('ls -la')).toBe(true);
-    expect(validateCommandWithArgs('ls -ltr')).toBe(true);
-    expect(validateCommandWithArgs('ls --any-option')).toBe(true);
-  });
-
-  it('should handle complex command strings', () => {
-    // Command with multiple arguments
-    expect(validateCommandWithArgs('ls -la /tmp')).toBe(true);
-    // Command with options and arguments
-    expect(validateCommandWithArgs('git log --oneline -n 5')).toBe(true);
-  });
-
-  it('should handle empty or whitespace-only commands', () => {
-    expect(validateCommandWithArgs('')).toBe(false);
-    expect(validateCommandWithArgs('   ')).toBe(false);
-  });
-});
-
-describe('findDenyCommandInBlacklist', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('should return DenyCommand for commands containing blacklisted terms', () => {
-    // Specific command detection still works, but regex matching is disabled
-    expect(findDenyCommandInBlacklist('rm -rf /')).not.toBeNull();
-    // The following tests now return null since regex matching is disabled
-    // and sudo is only checked as a specific command
-    expect(findDenyCommandInBlacklist('echo hello | sudo bash')).toBeNull();
-    expect(findDenyCommandInBlacklist('cat file | grep pattern | chmod')).not.toBeNull();
-    expect(findDenyCommandInBlacklist('find . -exec chmod 777 {} ;')).not.toBeNull();
+  it('should validate commands with arguments', () => {
+    const result = validateCommandWithArgs('ls -la');
+    expect(result.isValid).toBe(true);
+    const resultGit = validateCommandWithArgs('git status');
+    expect(resultGit.isValid).toBe(true);
   });
 
-  it('should return DenyCommand for xargs command with blacklisted argument', () => {
-    const result = findDenyCommandInBlacklist('xargs rm');
-    expect(result).not.toBeNull();
-    expect(result && typeof result === 'object' ? result.command : result).toBe('rm');
+  it('should validate subcommands based on configuration', () => {
+    expect(validateCommandWithArgs('git status').isValid).toBe(true); // 許可されたサブコマンド
+    expect(validateCommandWithArgs('npm run').isValid).toBe(true); // 許可されたサブコマンド
   });
 
-  it('should return DenyCommand for find command with blacklisted argument', () => {
-    const result = findDenyCommandInBlacklist('find . -type f -exec chmod 644 {} ;');
-    expect(result).not.toBeNull();
-    // Since 'find' itself is blacklisted, it will return the 'find' DenyCommand first
-    // before checking the arguments
-    expect(result && typeof result === 'object' ? result.command : result).toBe('find');
+  it('should reject unauthorized subcommands', () => {
+    const resultDanger = validateCommandWithArgs('git danger-command');
+    expect(resultDanger.isValid).toBe(false); // 許可されていないサブコマンド
   });
 
-  it('should return DenyCommand even if blacklisted command is not the base command', () => {
-    expect(findDenyCommandInBlacklist('echo Let me explain how sudo works')).toBeNull(); // No regex matching
-    expect(findDenyCommandInBlacklist('ls | xargs rm')).not.toBeNull();
-    expect(findDenyCommandInBlacklist('ls ; rm')).not.toBeNull();
+  it('should reject denied subcommands', () => {
+    // NPMのInstallやUninstallなどは拒否リストに入っている
+    expect(validateCommandWithArgs('npm install').isValid).toBe(false);
+    expect(validateCommandWithArgs('npm uninstall').isValid).toBe(false);
+    expect(validateCommandWithArgs('npm update').isValid).toBe(false);
+    expect(validateCommandWithArgs('npm audit').isValid).toBe(false);
+
+    // 拒否リストに入っていないサブコマンドは許可される
+    expect(validateCommandWithArgs('npm run').isValid).toBe(true);
+    expect(validateCommandWithArgs('npm test').isValid).toBe(true);
+    expect(validateCommandWithArgs('npm ci').isValid).toBe(true);
   });
 
-  it('should return null for safe commands with no blacklisted terms', () => {
-    expect(findDenyCommandInBlacklist('ls -la')).toBeNull();
-    expect(findDenyCommandInBlacklist('echo Hello World')).toBeNull();
-    expect(findDenyCommandInBlacklist('git status')).toBeNull();
-    expect(findDenyCommandInBlacklist('cat /etc/passwd')).toBeNull();
+  it('should handle whitespace in commands properly', () => {
+    expect(validateCommandWithArgs('ls    -la').isValid).toBe(true);
+    expect(validateCommandWithArgs('  ls -la  ').isValid).toBe(true);
+    expect(validateCommandWithArgs('git    status').isValid).toBe(true);
   });
 
-  it('should allow ls with find filename as argument', () => {
-    // 'ls find' should be allowed since 'find' is just an argument to 'ls', not a command being executed
-    expect(findDenyCommandInBlacklist('ls find')).toBeNull();
+  it('should allow all subcommands for string-only whitelist entries', () => {
+    // ls is defined as a string in the test config, so all subcommands should be allowed
+    expect(validateCommandWithArgs('ls -la').isValid).toBe(true);
+    expect(validateCommandWithArgs('ls -ltr').isValid).toBe(true);
+    expect(validateCommandWithArgs('ls --any-option').isValid).toBe(true);
   });
 
-  it('should show proper behavior for file names containing blacklisted terms', () => {
-    const rmResult = findDenyCommandInBlacklist('cat rm-instructions.txt');
-    expect(rmResult).toBeNull();
-
-    const echoResult = findDenyCommandInBlacklist('echo "Do not use rm"');
-    expect(echoResult).toBeNull();
+  it('should handle complex command strings', () => {
+    // Command with multiple arguments
+    expect(validateCommandWithArgs('ls -la /tmp').isValid).toBe(true);
+    // Command with options and arguments
+    expect(validateCommandWithArgs('git log --oneline -n 5').isValid).toBe(true);
   });
 
-  it('should handle commands with arguments and pipes correctly', () => {
-    expect(findDenyCommandInBlacklist('ls -la | grep file | wc -l')).toBeNull();
-    expect(findDenyCommandInBlacklist('git grep "pattern" -- "*.js"')).toBeNull();
-    expect(findDenyCommandInBlacklist('find . -name *.js | xargs rm')).not.toBeNull();
-  });
-
-  it('should handle empty or whitespace-only commands', () => {
-    expect(findDenyCommandInBlacklist('')).toBeNull();
-    expect(findDenyCommandInBlacklist('   ')).toBeNull();
-  });
-
-  it('should handle command parsing correctly', () => {
-    // regexモード削除後の動作確認テスト
-    // テスト用の設定を使用
+  // 追加テスト：ブラックリストの正確な処理
+  it('should handle special patterns for blacklisted commands', () => {
+    // テスト用設定でrm、sudo、chmod、findがブラックリストに含まれていることを想定
     const mockConfig = {
       allowedDirectories: ['/', '/tmp'],
-      allowCommands: ['ls', 'cat'],
+      allowCommands: ['ls', 'cat', 'git', 'echo', 'grep', 'wc'],
       denyCommands: [
         { command: 'rm', message: 'rm is dangerous' },
         { command: 'sudo', message: 'sudo is not allowed' },
+        { command: 'chmod', message: 'chmod is not allowed' },
+        { command: 'find', message: 'find with exec is not allowed' },
       ],
       defaultErrorMessage: 'Command not allowed',
     };
     vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
 
-    // 直接のコマンドのチェック
-    expect(findDenyCommandInBlacklist('sudo')).not.toBeNull();
-    expect(findDenyCommandInBlacklist('rm')).not.toBeNull();
+    // ブラックリストコマンドは拒否
+    expect(validateCommandWithArgs('rm -rf /').isValid).toBe(false);
+    expect(validateCommandWithArgs('chmod 777 file').isValid).toBe(false);
+    expect(validateCommandWithArgs('find . -type f').isValid).toBe(false);
 
-    // 混合コマンドチェック - sudoがベースコマンドなのでブロックされる
-    const result = findDenyCommandInBlacklist('sudo ls');
-    expect(result).not.toBeNull();
-    if (result && typeof result === 'object') {
-      expect(result.command).toBe('sudo');
-    }
+    // echoはsudoを含むが実際のコマンドではないので許可
+    expect(validateCommandWithArgs('echo "Let me explain how sudo works"').isValid).toBe(true);
 
-    // ベースコマンドがsudoでない場合は安全
-    expect(findDenyCommandInBlacklist('echo sudo')).toBeNull();
-    expect(findDenyCommandInBlacklist('something sudo')).toBeNull();
+    // ファイル名にブラックリストの単語を含むが実際のコマンドではない
+    expect(validateCommandWithArgs('cat rm-instructions.txt').isValid).toBe(true);
+    expect(validateCommandWithArgs('echo "Do not use rm"').isValid).toBe(true);
+
+    // lsに引数としてfindを使用する場合はtrue
+    expect(validateCommandWithArgs('ls find').isValid).toBe(true);
   });
 
-  it('should return the correct DenyCommand object for specific commands', () => {
-    // Mock config to ensure it includes sudo as a specific command
+  it('should handle empty or whitespace-only commands correctly', () => {
+    expect(validateCommandWithArgs('').isValid).toBe(false);
+    expect(validateCommandWithArgs('   ').isValid).toBe(false);
+  });
+
+  // ブラックリスト関連のテスト（以前はfindDenyCommandInBlacklistで検証していた）
+  it('should reject blacklisted commands', () => {
+    // テスト用設定でrmとsudoがブラックリストに含まれていることを想定
     const mockConfig = {
       allowedDirectories: ['/', '/tmp'],
-      allowCommands: ['ls', 'cat'],
+      allowCommands: ['ls', 'cat', 'git', 'echo'],
       denyCommands: [
         { command: 'rm', message: 'rm is dangerous' },
         { command: 'sudo', message: 'sudo is not allowed' },
+        { command: 'chmod', message: 'chmod is not allowed' },
       ],
       defaultErrorMessage: 'Command not allowed',
     };
     vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
 
-    const rmCommand = findDenyCommandInBlacklist('rm -rf /');
-    expect(rmCommand).not.toBeNull();
-    expect(typeof rmCommand).toBe('object');
-    if (rmCommand && typeof rmCommand === 'object') {
-      expect(rmCommand.command).toBe('rm');
-      expect(rmCommand.message).toBeDefined();
-    }
+    // 禁止コマンドのチェック
+    expect(validateCommandWithArgs('rm -rf /').isValid).toBe(false);
+    expect(validateCommandWithArgs('sudo ls').isValid).toBe(false);
+    expect(validateCommandWithArgs('chmod 777 file').isValid).toBe(false);
 
-    // Now sudo should be detected
-    const sudoCommand = findDenyCommandInBlacklist('sudo');
-    expect(sudoCommand).not.toBeNull();
-    if (sudoCommand && typeof sudoCommand === 'object') {
-      expect(sudoCommand.command).toBe('sudo');
-    }
+    // 安全なコマンドは許可
+    expect(validateCommandWithArgs('ls -la').isValid).toBe(true);
+    expect(validateCommandWithArgs('echo "Hello World"').isValid).toBe(true);
+    expect(validateCommandWithArgs('git status').isValid).toBe(true);
+    expect(validateCommandWithArgs('cat /etc/passwd').isValid).toBe(true);
+  });
+
+  it('should detect blacklisted commands in command execution arguments', () => {
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat', 'xargs', 'find', 'echo'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // xargsの引数に禁止コマンドを含む場合はfalseを返す
+    expect(validateCommandWithArgs('xargs rm').isValid).toBe(false);
+
+    // 安全な引数の場合はtrueを返す
+    expect(validateCommandWithArgs('xargs echo').isValid).toBe(true);
+
+    // 普通の引数は問題なし
+    expect(validateCommandWithArgs('ls find').isValid).toBe(true);
+    expect(validateCommandWithArgs('echo "Do not use rm"').isValid).toBe(true);
   });
 });
+
+// テストケースをvalidateCommandWithArgsとvalidateMultipleCommandsに統合
 
 describe('getCommandName', () => {
   it('should extract command name from string', () => {
@@ -221,44 +180,6 @@ describe('getCommandName', () => {
   it('should extract command name from object with command and subCommands properties', () => {
     expect(getCommandName({ command: 'git', subCommands: ['status', 'log'] })).toBe('git');
     expect(getCommandName({ command: 'npm', subCommands: ['install', 'run'] })).toBe('npm');
-  });
-});
-
-describe('getBlacklistErrorMessage', () => {
-  it('should return custom error message for blacklisted commands with message', () => {
-    // rmコマンドは message プロパティを持っているはず
-    const rmCommand = {
-      command: 'rm',
-      message:
-        'rm コマンドは危険なため使用できません。代わりにゴミ箱に移動するコマンドを使用してください',
-    };
-    const rmError = getBlacklistErrorMessage(rmCommand);
-    expect(rmError).toContain('代わりにゴミ箱に移動する');
-
-    // sudoコマンドも message プロパティを持っているはず
-    const sudoCommand = {
-      command: 'sudo',
-      message: 'sudo コマンドは権限昇格のため使用できません。',
-    };
-    const sudoError = getBlacklistErrorMessage(sudoCommand);
-    expect(sudoError).toContain('権限昇格');
-  });
-
-  it('should return default error message for commands without message', () => {
-    // messageプロパティがないDenyCommandを作成
-    const denyCommandWithoutMessage: DenyCommand = 'test-command';
-    const defaultError = getBlacklistErrorMessage(denyCommandWithoutMessage);
-    expect(defaultError).toBe(configLoader.getConfig().defaultErrorMessage);
-  });
-
-  it('should return default error message for commands with undefined message', () => {
-    // messageプロパティが undefined の DenyCommand を作成
-    const denyCommandWithUndefinedMessage: DenyCommand = {
-      command: 'test-command',
-      message: undefined,
-    };
-    const defaultError = getBlacklistErrorMessage(denyCommandWithUndefinedMessage);
-    expect(defaultError).toBe(configLoader.getConfig().defaultErrorMessage);
   });
 });
 
@@ -338,41 +259,162 @@ describe('extractCommands', () => {
 });
 
 describe('validateMultipleCommands', () => {
-  it('should return true when all commands in a sequence are allowed', () => {
-    // Assuming ls, cat, and echo are in the allowlist
-    expect(validateMultipleCommands('ls -la; cat file.txt; echo test')).toBe(true);
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('should return false when any command in a sequence is not allowed', () => {
-    // Assuming rm is blacklisted
-    expect(validateMultipleCommands('ls -la; rm -rf /; echo test')).toBe(false);
+  it('should return true when all commands in a sequence are allowed', () => {
+    // Assuming ls, cat, and echo are in the allowlist
+    const result = validateMultipleCommands('ls -la; cat file.txt; echo test');
+    expect(result.isValid).toBe(true);
+    expect(result.message).toBe('all commands are allowed');
+  });
+
+  it('should return deny command info when blacklisted command is found', () => {
+    // テスト用設定
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat', 'echo', 'grep', 'date'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // ブラックリストのコマンドを含む複合コマンド
+    const result1 = validateMultipleCommands('ls -la; rm -rf /; echo test');
+    expect(result1.isValid).toBe(false);
+    expect(result1.message).toBe('rm is dangerous');
+    expect(result1.command).toBe('rm -rf /');
+
+    const result2 = validateMultipleCommands('ls -la | xargs rm');
+    expect(result2.isValid).toBe(false);
+    expect(result2.message).toBe('rm is dangerous');
+    expect(result2.command).toBe('xargs rm');
+
+    const result3 = validateMultipleCommands('ls ; rm');
+    expect(result3.isValid).toBe(false);
+    expect(result3.message).toBe('rm is dangerous');
+    expect(result3.command).toBe('rm');
   });
 
   it('should return true for simple allowed commands', () => {
-    expect(validateMultipleCommands('ls -la')).toBe(true);
+    const result = validateMultipleCommands('ls -la');
+    expect(result.isValid).toBe(true);
+    expect(result.message).toBe('all commands are allowed');
   });
 
   it('should validate commands with pipes', () => {
-    expect(validateMultipleCommands('cat file.txt | grep pattern')).toBe(true);
+    const result1 = validateMultipleCommands('cat file.txt | grep pattern');
+    expect(result1.isValid).toBe(true);
+    expect(result1.message).toBe('all commands are allowed');
+
+    const result2 = validateMultipleCommands('ls -la | grep file | wc -l');
+    expect(result2.isValid).toBe(true);
+    expect(result2.message).toBe('all commands are allowed');
   });
 
   it('should validate commands with command substitution', () => {
-    expect(validateMultipleCommands('echo $(date)')).toBe(true);
+    const result = validateMultipleCommands('echo $(date)');
+    expect(result.isValid).toBe(true);
+    expect(result.message).toBe('all commands are allowed');
   });
 
-  it('should validate complex command combinations', () => {
-    expect(validateMultipleCommands('ls -la | grep .js && echo $(date) || echo "failed"')).toBe(
-      true
-    );
+  it('should handle more complex pipe and combination cases', () => {
+    // テスト用設定
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat', 'git', 'echo', 'grep', 'wc', 'xargs', 'date'],
+      denyCommands: [
+        { command: 'rm', message: 'rm is dangerous' },
+        { command: 'find', message: 'find with exec is not allowed' },
+      ],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // 複合の安全なコマンド
+    const result = validateMultipleCommands('ls -la | grep file | wc -l');
+    expect(result.isValid).toBe(true);
+    expect(validateMultipleCommands('git grep "pattern" -- "*.js"').isValid).toBe(true);
+
+    // 複合の危険なコマンド
+    const result1Complex = validateMultipleCommands('find . -name *.js | xargs rm');
+    expect(result1Complex.isValid).toBe(false);
+
+    const result2Complex = validateMultipleCommands('ls | xargs rm');
+    expect(result2Complex.isValid).toBe(false);
+
+    const result3Complex = validateMultipleCommands('ls ; rm');
+    expect(result3Complex.isValid).toBe(false);
+
+    // コマンド置換とパイプの組み合わせ
+    const result1 = validateMultipleCommands('echo "Today is $(date)"');
+    expect(result1.isValid).toBe(true);
+    expect(result1.message).toBe('all commands are allowed');
+
+    const resultRm = validateMultipleCommands('echo $(rm -rf /)');
+    expect(resultRm.isValid).toBe(false);
+    expect(resultRm.message).toBe('rm is dangerous');
   });
 
   it('should reject if command substitution contains disallowed commands', () => {
-    // Assuming rm is blacklisted
-    expect(validateMultipleCommands('echo $(rm -rf /)')).toBe(false);
+    // テスト用設定
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat', 'echo', 'grep', 'date', 'find', 'xargs'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // コマンド置換内に禁止コマンドを含む
+    const result1 = validateMultipleCommands('echo $(rm -rf /)');
+    expect(result1.isValid).toBe(false);
+    expect(result1.message).toBe('rm is dangerous');
+
+    const result2 = validateMultipleCommands('find . -name *.js | xargs rm');
+    expect(result2.isValid).toBe(false);
+    expect(result2.message).toBe('rm is dangerous');
+  });
+
+  it('should detect exec option in find command correctly', () => {
+    // テスト用設定
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat', 'echo', 'find', 'chmod'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // findコマンドとchmodは単体では允可されているが、組み合わせまではチェックしない
+    expect(validateCommandWithArgs('find . -type f').isValid).toBe(true);
+    expect(validateCommandWithArgs('chmod 644 file.txt').isValid).toBe(true);
+
+    // 複合コマンドをチェックするときに-execオプションも確認される
+    const chmodResult = validateMultipleCommands('find . -type f -exec chmod 644 {} ;');
+    expect(chmodResult.isValid).toBe(true);
+
+    // rmを実行する場合はブラックリストで開始される
+    const rmResult = validateMultipleCommands('find . -type f -exec rm {} ;');
+    expect(rmResult.isValid).toBe(false);
+    expect(rmResult.message).toBe('rm is dangerous');
+    expect(rmResult.command).toContain('find . -type f -exec rm');
   });
 
   it('should handle brace and parenthesis groups', () => {
-    expect(validateMultipleCommands('{ ls -la; echo test; }')).toBe(true);
-    expect(validateMultipleCommands('(ls -la; echo test)')).toBe(true);
+    const result1 = validateMultipleCommands('{ ls -la; echo test; }');
+    expect(result1.isValid).toBe(true);
+
+    const result2 = validateMultipleCommands('(ls -la; echo test)');
+    expect(result2.isValid).toBe(true);
+  });
+
+  it('should handle blocked commands in groups', () => {
+    const result1 = validateMultipleCommands('{ ls -la; rm -rf /; echo test; }');
+    expect(result1.isValid).toBe(false);
+
+    const result2 = validateMultipleCommands('(ls -la; rm -rf /; echo test)');
+    expect(result2.isValid).toBe(false);
   });
 });

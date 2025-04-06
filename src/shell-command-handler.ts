@@ -1,12 +1,7 @@
 import { execa } from 'execa';
 import { sync as commandExistsSync } from 'command-exists';
 
-import {
-  validateCommandWithArgs,
-  validateMultipleCommands,
-  findDenyCommandInBlacklist,
-  getBlacklistErrorMessage,
-} from './command-validator.js';
+import { validateMultipleCommands } from './command-validator.js';
 import { getWorkingDirectory, setWorkingDirectory } from './directory-manager.js';
 
 // No re-exports - functions should be imported directly from their respective modules
@@ -38,20 +33,13 @@ export async function handleShellCommand(
       throw new Error(`Command not found: ${baseCommand}`);
     }
 
-    // command自体にblacklistの単語が含まれている場合は実行しない
-    const denyCommand = findDenyCommandInBlacklist(command);
-    if (denyCommand) {
-      throw new Error(getBlacklistErrorMessage(denyCommand));
-    }
-
     // コマンドが許可リストに含まれているか確認
-    if (!validateCommandWithArgs(command)) {
-      throw new Error(`Command not allowed: ${baseCommand}`);
-    }
-
-    // 複数コマンドの場合、すべてのコマンドが許可リストに含まれているか確認
-    if (!validateMultipleCommands(command)) {
-      throw new Error(`One or more commands in the sequence are not allowed`);
+    // この検証は単一コマンドの検証と禁止コマンドのチェックも行う
+    // validateMultipleCommandsは内部で各コマンドが許可リストに含まれているか確認する
+    // また、ブラックリストのチェックも含まれている
+    const validationResult = validateMultipleCommands(command);
+    if (validationResult.isValid === false) {
+      throw new Error(`${validationResult.message}\nCommand: ${command}`);
     }
 
     // コマンド実行
