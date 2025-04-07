@@ -2,12 +2,24 @@ import fs from 'fs';
 import path from 'path';
 import { getConfig } from './config/config-loader.js';
 
+import { DenyCommand } from './config/shell-command-config.js';
+
+type BlockReason = {
+  denyCommand?: DenyCommand;
+  location: string;
+};
+
 /**
  * ブロックされたコマンドのログを記録する関数
  * @param command ブロックされたコマンド
  * @param errorMessage ブロックの理由
+ * @param blockReason ブロックに関する詳細情報
  */
-export function logBlockedCommand(command: string, errorMessage: string): void {
+export function logBlockedCommand(
+  command: string,
+  errorMessage: string,
+  blockReason?: BlockReason
+): void {
   try {
     const config = getConfig();
 
@@ -28,7 +40,24 @@ export function logBlockedCommand(command: string, errorMessage: string): void {
     const timestamp = new Date().toISOString();
 
     // ログメッセージを生成
-    const logMessage = `[${timestamp}] BLOCKED COMMAND: ${command} | REASON: ${errorMessage}\n`;
+    let logMessage = `[${timestamp}] BLOCKED COMMAND: ${command} | REASON: ${errorMessage}`;
+
+    // ブロック理由の詳細を追加
+    if (blockReason) {
+      logMessage += ` | LOCATION: ${blockReason.location}`;
+
+      if (blockReason.denyCommand) {
+        const denyCmd = blockReason.denyCommand;
+        const cmdName = typeof denyCmd === 'string' ? denyCmd : denyCmd.command;
+        logMessage += ` | DENY_COMMAND: ${cmdName}`;
+
+        if (typeof denyCmd === 'object' && denyCmd.message) {
+          logMessage += ` | DENY_MESSAGE: ${denyCmd.message}`;
+        }
+      }
+    }
+
+    logMessage += '\n';
 
     // ログファイルに追記
     fs.appendFileSync(logPath, logMessage);

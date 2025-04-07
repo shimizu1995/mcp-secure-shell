@@ -32,7 +32,10 @@ export async function handleShellCommand(
     const isCommandExists = await commandExistsSync(baseCommand);
     if (!isCommandExists) {
       const errorMessage = `Command not found: ${baseCommand}`;
-      logBlockedCommand(command, errorMessage);
+      const blockReason = {
+        location: 'handleShellCommand:commandNotFound',
+      };
+      logBlockedCommand(command, errorMessage, blockReason);
       throw new Error(errorMessage);
     }
 
@@ -43,7 +46,7 @@ export async function handleShellCommand(
     const validationResult = validateMultipleCommands(command);
     if (validationResult.isValid === false) {
       const errorMessage = `${validationResult.message}\nCommand: ${command}`;
-      logBlockedCommand(command, validationResult.message);
+      logBlockedCommand(command, validationResult.message, validationResult.blockReason);
       throw new Error(errorMessage);
     }
 
