@@ -9,7 +9,7 @@ export const createMcpServer = async () => {
   // Create an MCP server
   const mcpServer = new McpServer(
     {
-      name: 'whitelist-shell-server',
+      name: 'secure-shell-server',
       version: '1.0.0',
     },
     { capabilities: { tools: {} } }

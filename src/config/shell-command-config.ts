@@ -31,7 +31,7 @@ export interface ShellCommandConfig {
   /**
    * ブロックされたコマンドを記録するログファイルのパス
    * 未指定の場合はログ記録を行わない
-   * 指定する場合の例: '/tmp/mcp-whitelist-shell/block.log'
+   * 指定する場合の例: '/tmp/mcp-secure-shell/block.log'
    */
   blockLogPath?: string;
 }
