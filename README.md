@@ -4,7 +4,7 @@ This is a template for creating a Model Context Protocol (MCP) server. It provid
 
 ## Shell Command Configuration
 
-The MCP whitelist shell allows you to configure which shell commands are allowed or denied through a JSON configuration file. This helps in creating a secure environment for executing shell commands.
+The MCP secure shell allows you to configure which shell commands are allowed or denied through a JSON configuration file. This helps in creating a secure environment for executing shell commands.
 
 ### Configuration File
 

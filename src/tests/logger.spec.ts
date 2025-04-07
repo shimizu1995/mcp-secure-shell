@@ -5,7 +5,7 @@ import { logBlockedCommand } from '../logger.js';
 import * as configLoader from '../config/config-loader.js';
 
 describe('logger', () => {
-  const testLogPath = '/tmp/mcp-whitelist-shell-test/block.log';
+  const testLogPath = '/tmp/mcp-secure-shell-test/block.log';
   const testConfig = {
     allowedDirectories: [],
     allowCommands: [],

@@ -20,7 +20,7 @@ describe('handleShellCommand', () => {
     // Mock logBlockedCommand to prevent actual logging during tests
     vi.spyOn(logger, 'logBlockedCommand').mockImplementation(() => {});
   });
-  it('should execute a whitelisted command', async () => {
+  it('should execute an allowed command', async () => {
     // Use a test directory path that will be allowed by our mock
     const testDir = '/test-dir';
     // Make sure working directory is mocked correctly

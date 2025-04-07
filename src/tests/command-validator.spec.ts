@@ -65,7 +65,7 @@ describe('validateCommandWithArgs', () => {
     expect(validateCommandWithArgs('git    status').isValid).toBe(true);
   });
 
-  it('should allow all subcommands for string-only whitelist entries', () => {
+  it('should allow all subcommands for string-only allowlist entries', () => {
     // ls is defined as a string in the test config, so all subcommands should be allowed
     expect(validateCommandWithArgs('ls -la').isValid).toBe(true);
     expect(validateCommandWithArgs('ls -ltr').isValid).toBe(true);
