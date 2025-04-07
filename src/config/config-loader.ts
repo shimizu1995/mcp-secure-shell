@@ -37,6 +37,9 @@ export function loadConfig(): ShellCommandConfig {
       config.defaultErrorMessage = 'このコマンドは許可リストに含まれていないため実行できません。';
     }
 
+    // ノート: blockLogPathはデフォルトでは設定しない。
+    // 設定ファイルで明示的に指定された場合のみログ記録を行う。
+
     return config;
   } catch (error) {
     console.error(`Error loading config file: ${error}`);

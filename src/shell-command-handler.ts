@@ -3,6 +3,7 @@ import { sync as commandExistsSync } from 'command-exists';
 
 import { validateMultipleCommands } from './command-validator.js';
 import { getWorkingDirectory, setWorkingDirectory } from './directory-manager.js';
+import { logBlockedCommand } from './logger.js';
 
 // No re-exports - functions should be imported directly from their respective modules
 
@@ -30,7 +31,9 @@ export async function handleShellCommand(
     // コマンドが存在するか確認
     const isCommandExists = await commandExistsSync(baseCommand);
     if (!isCommandExists) {
-      throw new Error(`Command not found: ${baseCommand}`);
+      const errorMessage = `Command not found: ${baseCommand}`;
+      logBlockedCommand(command, errorMessage);
+      throw new Error(errorMessage);
     }
 
     // コマンドが許可リストに含まれているか確認
@@ -39,7 +42,9 @@ export async function handleShellCommand(
     // また、ブラックリストのチェックも含まれている
     const validationResult = validateMultipleCommands(command);
     if (validationResult.isValid === false) {
-      throw new Error(`${validationResult.message}\nCommand: ${command}`);
+      const errorMessage = `${validationResult.message}\nCommand: ${command}`;
+      logBlockedCommand(command, validationResult.message);
+      throw new Error(errorMessage);
     }
 
     // コマンド実行

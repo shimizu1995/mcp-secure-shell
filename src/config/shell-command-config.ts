@@ -27,4 +27,11 @@ export interface ShellCommandConfig {
   allowCommands: AllowCommand[];
   denyCommands: DenyCommand[];
   defaultErrorMessage: string;
+
+  /**
+   * ブロックされたコマンドを記録するログファイルのパス
+   * 未指定の場合はログ記録を行わない
+   * 指定する場合の例: '/tmp/mcp-whitelist-shell/block.log'
+   */
+  blockLogPath?: string;
 }
