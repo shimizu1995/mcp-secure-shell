@@ -44,6 +44,10 @@ type ValidationResult = {
   message: string;
   command: string;
   baseCommand: string;
+  blockReason?: {
+    denyCommand?: DenyCommand;
+    location: string;
+  };
 };
 
 /**
@@ -72,7 +76,11 @@ export function validateCommandWithArgs(command: string): ValidationResult {
   };
 
   if (!baseCommand) {
-    return { ...result, message: 'empty command' };
+    return {
+      ...result,
+      message: 'empty command',
+      blockReason: { location: 'validateCommandWithArgs:emptyCommand' },
+    };
   }
 
   const blacklistedCmd = config.denyCommands.find((denyCmd) => {
@@ -81,7 +89,14 @@ export function validateCommandWithArgs(command: string): ValidationResult {
   });
 
   if (blacklistedCmd) {
-    return { ...result, message: getDenyCommandMessage(blacklistedCmd) };
+    return {
+      ...result,
+      message: getDenyCommandMessage(blacklistedCmd),
+      blockReason: {
+        denyCommand: blacklistedCmd,
+        location: 'validateCommandWithArgs:blacklistedBaseCommand',
+      },
+    };
   }
 
   if (COMMANDS_THAT_EXECUTE_OTHER_COMMANDS.includes(baseCommand)) {
@@ -92,7 +107,14 @@ export function validateCommandWithArgs(command: string): ValidationResult {
         return cmdName === arg;
       });
       if (blacklistedArg) {
-        return { ...result, message: getDenyCommandMessage(blacklistedArg) };
+        return {
+          ...result,
+          message: getDenyCommandMessage(blacklistedArg),
+          blockReason: {
+            denyCommand: blacklistedArg,
+            location: 'validateCommandWithArgs:blacklistedArgument',
+          },
+        };
       }
     }
   }
@@ -103,7 +125,13 @@ export function validateCommandWithArgs(command: string): ValidationResult {
   });
 
   if (matchedCommand === undefined) {
-    return { ...result, message: config.defaultErrorMessage };
+    return {
+      ...result,
+      message: config.defaultErrorMessage,
+      blockReason: {
+        location: 'validateCommandWithArgs:commandNotInAllowlist',
+      },
+    };
   }
 
   if (typeof matchedCommand === 'string') {
@@ -114,7 +142,14 @@ export function validateCommandWithArgs(command: string): ValidationResult {
     const subCommand = parts[1];
 
     if (matchedCommand.denySubCommands && matchedCommand.denySubCommands.includes(subCommand)) {
-      return { ...result, message: config.defaultErrorMessage };
+      return {
+        ...result,
+        message: config.defaultErrorMessage,
+        blockReason: {
+          location: 'validateCommandWithArgs:deniedSubcommand',
+          denyCommand: { command: `${baseCommand} ${subCommand}` },
+        },
+      };
     }
 
     if (matchedCommand.subCommands) {
@@ -123,6 +158,12 @@ export function validateCommandWithArgs(command: string): ValidationResult {
         ...result,
         isValid,
         message: isValid ? 'allowed subcommand' : config.defaultErrorMessage,
+        ...(!isValid && {
+          blockReason: {
+            location: 'validateCommandWithArgs:subcommandNotInAllowlist',
+            denyCommand: { command: `${baseCommand} ${subCommand}` },
+          },
+        }),
       };
     }
   }
@@ -201,6 +242,9 @@ export function validateMultipleCommands(commandString: string): ValidationResul
       baseCommand: '',
       command: commandString,
       message: redirectionError,
+      blockReason: {
+        location: 'validateMultipleCommands:redirectionError',
+      },
     };
   }
 
@@ -218,7 +262,15 @@ export function validateMultipleCommands(commandString: string): ValidationResul
 
   // コマンドが空の場合は拒否
   if (commandsToCheck.length === 0) {
-    return { isValid: false, baseCommand: '', command: commandString, message: 'empty command' };
+    return {
+      isValid: false,
+      baseCommand: '',
+      command: commandString,
+      message: 'empty command',
+      blockReason: {
+        location: 'validateMultipleCommands:emptyCommand',
+      },
+    };
   }
 
   // 各コマンドが許可リストに含まれているか検証
@@ -231,6 +283,9 @@ export function validateMultipleCommands(commandString: string): ValidationResul
         baseCommand: '',
         command: cmd,
         message: cmdRedirectionError,
+        blockReason: {
+          location: 'validateMultipleCommands:subcommandRedirectionError',
+        },
       };
     }
 

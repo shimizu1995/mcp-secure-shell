@@ -50,7 +50,10 @@ describe('handleShellCommand', () => {
     // Verify the logger was called with the correct arguments
     expect(logSpy).toHaveBeenCalledWith(
       'nonexistent-command',
-      expect.stringContaining('Command not found')
+      expect.stringContaining('Command not found'),
+      expect.objectContaining({
+        location: 'handleShellCommand:commandNotFound',
+      })
     );
   });
 
@@ -107,6 +110,9 @@ describe('handleShellCommand', () => {
       message: 'One or more commands in the sequence are not allowed',
       command: 'forbidden-command',
       baseCommand: 'forbidden-command',
+      blockReason: {
+        location: 'validateCommandWithArgs:commandNotInAllowlist',
+      },
     });
     // Spy on the logBlockedCommand function
     const logSpy = vi.spyOn(logger, 'logBlockedCommand');
@@ -121,7 +127,10 @@ describe('handleShellCommand', () => {
     // Verify the logger was called with the correct arguments
     expect(logSpy).toHaveBeenCalledWith(
       command,
-      'One or more commands in the sequence are not allowed'
+      'One or more commands in the sequence are not allowed',
+      expect.objectContaining({
+        location: 'validateCommandWithArgs:commandNotInAllowlist',
+      })
     );
   });
 
@@ -136,6 +145,10 @@ describe('handleShellCommand', () => {
       message: customDenyCommand.message,
       baseCommand: 'rm',
       command: 'rm -rf /',
+      blockReason: {
+        denyCommand: customDenyCommand,
+        location: 'validateCommandWithArgs:blacklistedBaseCommand',
+      },
     });
     // Spy on the logBlockedCommand function
     const logSpy = vi.spyOn(logger, 'logBlockedCommand');
@@ -148,6 +161,13 @@ describe('handleShellCommand', () => {
     // Verify command is included in error
     expect(result.content[0].text).toContain('Command: rm -rf /');
     // Verify the logger was called with the correct arguments
-    expect(logSpy).toHaveBeenCalledWith(command, customDenyCommand.message);
+    expect(logSpy).toHaveBeenCalledWith(
+      command,
+      customDenyCommand.message,
+      expect.objectContaining({
+        denyCommand: customDenyCommand,
+        location: 'validateCommandWithArgs:blacklistedBaseCommand',
+      })
+    );
   });
 });
