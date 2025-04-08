@@ -8,6 +8,39 @@ import {
 } from '../command-validator.js';
 import * as configLoader from '../config/config-loader.js';
 
+vi.mock('../config/config-loader.js', () => {
+  const mockConfig = {
+    allowedDirectories: ['/tmp', __dirname],
+    allowCommands: [
+      'ls',
+      'cat',
+      'echo',
+      'grep',
+      'wc',
+      'date',
+      {
+        command: 'git',
+        subCommands: ['status', 'log'],
+      },
+      {
+        command: 'npm',
+        denySubCommands: ['install', 'uninstall', 'update', 'audit'],
+      },
+    ],
+    denyCommands: [
+      { command: 'rm', message: 'rm is dangerous' },
+      { command: 'sudo', message: 'sudo is not allowed' },
+      { command: 'chmod', message: 'chmod is not allowed' },
+    ],
+    defaultErrorMessage: 'Command not allowed',
+  };
+  return {
+    getConfig: vi.fn(() => mockConfig),
+    loadConfig: vi.fn(() => mockConfig),
+    reloadConfig: vi.fn(() => mockConfig),
+  };
+});
+
 // コンフィグの初期化
 describe('Config Initialization', () => {
   beforeEach(() => {
