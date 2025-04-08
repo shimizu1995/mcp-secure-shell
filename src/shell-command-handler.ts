@@ -44,7 +44,7 @@ export async function handleShellCommand(
     const validationResult = validateMultipleCommands(command);
     if (validationResult.isValid === false) {
       logBlockedCommand(command, validationResult);
-      throw new Error(`${validationResult.message}\nCommand: ${command}`);
+      throw new Error(`${validationResult.message}\nBlocked command: ${command}`);
     }
 
     // コマンド実行

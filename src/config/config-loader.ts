@@ -34,7 +34,7 @@ export function loadConfig(): ShellCommandConfig {
 
     // デフォルト値がない場合は設定
     if (!config.defaultErrorMessage) {
-      config.defaultErrorMessage = 'このコマンドは許可リストに含まれていないため実行できません。';
+      config.defaultErrorMessage = 'このコマンドは許可リストに含まれていないため実行できません';
     }
 
     // ノート: blockLogPathはデフォルトでは設定しない。

@@ -129,7 +129,7 @@ export function validateCommandWithArgs(command: string): ValidationResult {
   if (matchedCommand === undefined) {
     return {
       ...result,
-      message: config.defaultErrorMessage,
+      message: `${config.defaultErrorMessage}: ${baseCommand}`,
       blockReason: {
         location: 'validateCommandWithArgs:commandNotInAllowlist',
       },
@@ -146,7 +146,7 @@ export function validateCommandWithArgs(command: string): ValidationResult {
     if (matchedCommand.denySubCommands && matchedCommand.denySubCommands.includes(subCommand)) {
       return {
         ...result,
-        message: config.defaultErrorMessage,
+        message: `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
         blockReason: {
           location: 'validateCommandWithArgs:deniedSubcommand',
           denyCommand: { command: `${baseCommand} ${subCommand}` },
@@ -159,7 +159,9 @@ export function validateCommandWithArgs(command: string): ValidationResult {
       return {
         ...result,
         isValid,
-        message: isValid ? 'allowed subcommand' : config.defaultErrorMessage,
+        message: isValid
+          ? 'allowed subcommand'
+          : `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
         ...(!isValid && {
           blockReason: {
             location: 'validateCommandWithArgs:subcommandNotInAllowlist',
