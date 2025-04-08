@@ -50,7 +50,7 @@ describe('logger', () => {
     expect(fs.existsSync(testLogPath)).toBe(true);
     const logContent = fs.readFileSync(testLogPath, 'utf-8');
     expect(logContent).toContain('BLOCKED COMMAND: rm -rf /');
-    expect(logContent).toContain('REASON: Dangerous command not allowed');
+    expect(logContent).toContain('VALIDATION_RESULT: Dangerous command not allowed');
   });
 
   it('should handle errors when writing to the log file', () => {
