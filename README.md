@@ -77,4 +77,3 @@ A sample configuration file is provided at `mcp-config.sample.json`.
 ### Environment Variables
 
 - `MCP_CONFIG_PATH`: Path to the configuration file (default: `./mcp-config.json`)
-- `MCP_ALLOWED_DIRECTORIES`: Colon-separated list of directories where commands can be executed (deprecated, use `allowedDirectories` in config file instead)

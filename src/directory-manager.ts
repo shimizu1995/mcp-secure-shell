@@ -2,24 +2,10 @@ import path from 'path';
 import fs from 'fs';
 import { getConfig } from './config/config-loader.js';
 
-// Parse allowed directories from environment variable (for backward compatibility)
-export function parseAllowedDirectories(): string[] {
-  const allowedDirsEnv = process.env.MCP_ALLOWED_DIRECTORIES;
-  if (!allowedDirsEnv) {
-    return [];
-  }
-  return allowedDirsEnv
-    .split(':')
-    .map((dir) => dir.trim())
-    .filter((dir) => dir.length > 0);
-}
-
-// Gets the allowed directories from config and environment variables (for backward compatibility)
+// Gets the allowed directories from config
 export function getAllowedDirectoriesFromConfig(): string[] {
   const config = getConfig();
-  // First use directories from config, then add ones from environment variables for backward compatibility
-  const envDirectories = parseAllowedDirectories();
-  return [...config.allowedDirectories, ...envDirectories];
+  return [...config.allowedDirectories];
 }
 
 // If not set, no directories are allowed
@@ -69,9 +55,7 @@ export function isDirectoryAllowed(dir: string): boolean {
  */
 export function setWorkingDirectory(dir: string): string {
   if (!isDirectoryAllowed(dir)) {
-    throw new Error(
-      `Directory not allowed: ${dir}. Must be within: ${ALLOWED_DIRECTORIES.join(', ')}`
-    );
+    throw new Error(`Directory not allowed: ${dir}. Must be within one of the allowed directories`);
   }
 
   currentWorkingDirectory = path.resolve(dir);
