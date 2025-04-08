@@ -84,7 +84,18 @@ describe('validateCommandWithArgs', () => {
     // テスト用設定でrm、sudo、chmod、findがブラックリストに含まれていることを想定
     const mockConfig = {
       allowedDirectories: ['/', '/tmp'],
-      allowCommands: ['ls', 'cat', 'git', 'echo', 'grep', 'wc'],
+      allowCommands: [
+        'ls',
+        'cat',
+        'git',
+        'echo',
+        'grep',
+        'wc',
+        {
+          command: 'npm',
+          subCommands: ['run'],
+        },
+      ],
       denyCommands: [
         { command: 'rm', message: 'rm is dangerous' },
         { command: 'sudo', message: 'sudo is not allowed' },
@@ -94,6 +105,14 @@ describe('validateCommandWithArgs', () => {
       defaultErrorMessage: 'Command not allowed',
     };
     vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // 許可されたコマンドはtrue
+    expect(validateCommandWithArgs('ls -la').isValid).toBe(true);
+    expect(validateCommandWithArgs('cat file.txt').isValid).toBe(true);
+    expect(validateCommandWithArgs('git status').isValid).toBe(true);
+    expect(validateCommandWithArgs('echo "Hello World"').isValid).toBe(true);
+    expect(validateCommandWithArgs('npm run test').isValid).toBe(true);
+    expect(validateCommandWithArgs('npm install').isValid).toBe(false); // npm installは拒否
 
     // ブラックリストコマンドは拒否
     expect(validateCommandWithArgs('rm -rf /').isValid).toBe(false);
@@ -240,6 +259,22 @@ describe('extractCommands', () => {
     expect(commands).toContain('date');
     expect(commands).toContain('echo "failed"');
     expect(commands.length).toBe(5); // 5つのコマンドを抽出
+  });
+
+  it('should handle complex arguments with quoted parameters and special characters', () => {
+    // Issue #19の例から取ったコマンド
+    const input = 'grep -r "mcp-whitelist-shell" . --include="*.{md,json,js,ts,tsx,html,yml,yaml}"';
+    const commands = extractCommands(input);
+    expect(commands.length).toBe(1); // 1つのコマンドのみ
+    expect(commands[0]).toBe(
+      'grep -r "mcp-whitelist-shell" . --include="*.{md,json,js,ts,tsx,html,yml,yaml}"'
+    );
+
+    // 別の複雑な例
+    const input2 = 'find . -name "*.js" -o -name "*.ts" -not -path "*/node_modules/*"';
+    const commands2 = extractCommands(input2);
+    expect(commands2.length).toBe(1);
+    expect(commands2[0]).toBe('find . -name "*.js" -o -name "*.ts" -not -path "*/node_modules/*"');
   });
 
   it('should handle brace groups', () => {

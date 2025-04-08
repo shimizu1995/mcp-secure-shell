@@ -1,13 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getConfig } from './config/config-loader.js';
-
-import { DenyCommand } from './config/shell-command-config.js';
-
-type BlockReason = {
-  denyCommand?: DenyCommand;
-  location: string;
-};
+import { ValidationResult } from './command-validator.js';
 
 /**
  * ブロックされたコマンドのログを記録する関数
@@ -17,8 +11,7 @@ type BlockReason = {
  */
 export function logBlockedCommand(
   command: string,
-  errorMessage: string,
-  blockReason?: BlockReason
+  validationResult: ValidationResult | string
 ): void {
   try {
     const config = getConfig();
@@ -40,21 +33,25 @@ export function logBlockedCommand(
     const timestamp = new Date().toISOString();
 
     // ログメッセージを生成
-    let logMessage = `[${timestamp}] BLOCKED COMMAND: ${command} | REASON: ${errorMessage}`;
-
-    // ブロック理由の詳細を追加
-    if (blockReason) {
-      logMessage += ` | LOCATION: ${blockReason.location}`;
-
-      if (blockReason.denyCommand) {
-        const denyCmd = blockReason.denyCommand;
+    let logMessage = `[${timestamp}] BLOCKED COMMAND: ${command}`;
+    if (typeof validationResult === 'object') {
+      logMessage += `\n | REASON: ${validationResult.message}`;
+      logMessage += `\n | BASE_COMMAND: ${validationResult.baseCommand}`;
+      logMessage += `\n | ALLOWED_COMMANDS: ${validationResult.allowedCommands
+        .map((cmd) => (typeof cmd === 'string' ? cmd : cmd.command))
+        .join(', ')}`;
+      logMessage += `\n | BLOCK_REASON: ${validationResult.blockReason?.location}`;
+      if (validationResult.blockReason?.denyCommand) {
+        const denyCmd = validationResult.blockReason.denyCommand;
         const cmdName = typeof denyCmd === 'string' ? denyCmd : denyCmd.command;
-        logMessage += ` | DENY_COMMAND: ${cmdName}`;
+        logMessage += `\n | DENY_COMMAND: ${cmdName}`;
 
         if (typeof denyCmd === 'object' && denyCmd.message) {
-          logMessage += ` | DENY_MESSAGE: ${denyCmd.message}`;
+          logMessage += `\n | DENY_MESSAGE: ${denyCmd.message}`;
         }
       }
+    } else {
+      logMessage += ` | VALIDATION_RESULT: ${validationResult}`;
     }
 
     logMessage += '\n';

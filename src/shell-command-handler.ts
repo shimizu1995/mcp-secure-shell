@@ -26,17 +26,15 @@ export async function handleShellCommand(
     // Set the working directory
     setWorkingDirectory(directory);
 
-    const baseCommand = command.trim().split(/\s+/)[0];
+    // Extract the base command properly handling quoted strings and special characters
+    const baseCommandMatch = command.trim().match(/^(\S+)/);
+    const baseCommand = baseCommandMatch ? baseCommandMatch[1] : '';
 
     // コマンドが存在するか確認
     const isCommandExists = await commandExistsSync(baseCommand);
     if (!isCommandExists) {
-      const errorMessage = `Command not found: ${baseCommand}`;
-      const blockReason = {
-        location: 'handleShellCommand:commandNotFound',
-      };
-      logBlockedCommand(command, errorMessage, blockReason);
-      throw new Error(errorMessage);
+      logBlockedCommand(command, 'command not found');
+      throw new Error(`Command not found: ${baseCommand}`);
     }
 
     // コマンドが許可リストに含まれているか確認
@@ -45,9 +43,8 @@ export async function handleShellCommand(
     // また、ブラックリストのチェックも含まれている
     const validationResult = validateMultipleCommands(command);
     if (validationResult.isValid === false) {
-      const errorMessage = `${validationResult.message}\nCommand: ${command}`;
-      logBlockedCommand(command, validationResult.message, validationResult.blockReason);
-      throw new Error(errorMessage);
+      logBlockedCommand(command, validationResult);
+      throw new Error(`${validationResult.message}\nCommand: ${command}`);
     }
 
     // コマンド実行

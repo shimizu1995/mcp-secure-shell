@@ -1,5 +1,5 @@
 import { getConfig } from './config/config-loader.js';
-import { DenyCommand } from './config/shell-command-config.js';
+import { AllowCommand, DenyCommand } from './config/shell-command-config.js';
 
 // シェル演算子の正規表現パターン
 const SHELL_OPERATORS_REGEX = /([;|&]|&&|\|\||\(|\)|\{|\})/g;
@@ -39,11 +39,12 @@ export function getCommandName(
   return commandStr.command;
 }
 
-type ValidationResult = {
+export type ValidationResult = {
   isValid: boolean;
   message: string;
   command: string;
   baseCommand: string;
+  allowedCommands: AllowCommand[];
   blockReason?: {
     denyCommand?: DenyCommand;
     location: string;
@@ -73,6 +74,7 @@ export function validateCommandWithArgs(command: string): ValidationResult {
     command,
     baseCommand,
     message: '',
+    allowedCommands: config.allowCommands,
   };
 
   if (!baseCommand) {
@@ -192,8 +194,26 @@ export function extractCommands(commandString: string): string[] {
   // 結果のコマンドリスト
   const commands: string[] = [];
 
+  // 引用符内のコンテンツを一時的にプレースホルダーに置き換え
+  let processedCommand = commandString;
+  const quotedStrings: string[] = [];
+
+  // 引用符で囲まれた部分（ダブルクォートとシングルクォート）を検出して置き換え
+  const doubleQuotePattern = /"([^"]*)"/g;
+  const singleQuotePattern = /'([^']*)'/g;
+
+  processedCommand = processedCommand.replace(doubleQuotePattern, (match) => {
+    quotedStrings.push(match);
+    return `__QUOTE${quotedStrings.length - 1}__`;
+  });
+
+  processedCommand = processedCommand.replace(singleQuotePattern, (match) => {
+    quotedStrings.push(match);
+    return `__QUOTE${quotedStrings.length - 1}__`;
+  });
+
   // コマンド置換を検出して処理
-  const substitutions = commandString.match(COMMAND_SUBSTITUTION_REGEX) || [];
+  const substitutions = processedCommand.match(COMMAND_SUBSTITUTION_REGEX) || [];
 
   // コマンド置換内のコマンドを抽出
   substitutions.forEach((subst) => {
@@ -207,7 +227,6 @@ export function extractCommands(commandString: string): string[] {
   });
 
   // 元のコマンド文字列からコマンド置換部分を一時的に除去
-  let processedCommand = commandString;
   substitutions.forEach((subst, index) => {
     processedCommand = processedCommand.replace(subst, `__SUBST${index}__`);
   });
@@ -223,6 +242,16 @@ export function extractCommands(commandString: string): string[] {
     return !part.match(/^([;|&]|&&|\|\||\(|\)|\{|\})$/) && !part.match(/^__SUBST\d+__$/); // 置換されたパターンは除外
   });
 
+  // 元のコマンド文字列のプレースホルダーを元に戻す
+  basicCommands.forEach((cmd, index) => {
+    let restoredCmd = cmd;
+    // 引用符のプレースホルダーを元に戻す
+    quotedStrings.forEach((quotedStr, idx) => {
+      restoredCmd = restoredCmd.replace(`__QUOTE${idx}__`, quotedStr);
+    });
+    basicCommands[index] = restoredCmd;
+  });
+
   // 分割されたコマンドを追加
   commands.push(...basicCommands);
 
@@ -234,6 +263,8 @@ export function extractCommands(commandString: string): string[] {
  * @returns 検証結果
  */
 export function validateMultipleCommands(commandString: string): ValidationResult {
+  const config = getConfig();
+
   // リダイレクトチェックを先に行う
   const redirectionError = checkForOutputRedirection(commandString);
   if (redirectionError) {
@@ -242,6 +273,7 @@ export function validateMultipleCommands(commandString: string): ValidationResul
       baseCommand: '',
       command: commandString,
       message: redirectionError,
+      allowedCommands: config.allowCommands,
       blockReason: {
         location: 'validateMultipleCommands:redirectionError',
       },
@@ -267,6 +299,7 @@ export function validateMultipleCommands(commandString: string): ValidationResul
       baseCommand: '',
       command: commandString,
       message: 'empty command',
+      allowedCommands: config.allowCommands,
       blockReason: {
         location: 'validateMultipleCommands:emptyCommand',
       },
@@ -283,6 +316,7 @@ export function validateMultipleCommands(commandString: string): ValidationResul
         baseCommand: '',
         command: cmd,
         message: cmdRedirectionError,
+        allowedCommands: config.allowCommands,
         blockReason: {
           location: 'validateMultipleCommands:subcommandRedirectionError',
         },
@@ -298,6 +332,7 @@ export function validateMultipleCommands(commandString: string): ValidationResul
     isValid: true,
     baseCommand: commandsToCheck[0],
     command: commandString,
+    allowedCommands: config.allowCommands,
     message: 'all commands are allowed',
   };
 }
