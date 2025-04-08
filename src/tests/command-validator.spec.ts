@@ -5,39 +5,11 @@ import {
   extractCommands,
   validateMultipleCommands,
   checkForOutputRedirection,
+  extractCommandFromXargs,
+  extractCommandFromFindExec,
+  isCommandInAllowlist,
 } from '../command-validator.js';
 import * as configLoader from '../config/config-loader.js';
-import { AllowCommand } from '../config/shell-command-config.js';
-
-// Internal helper functions for tests
-function extractCommandFromXargs(command: string): string {
-  const parts = command.trim().split(/\s+/);
-  const xargsIndex = parts.findIndex((part) => part === 'xargs');
-
-  if (xargsIndex >= 0 && xargsIndex + 1 < parts.length) {
-    return parts[xargsIndex + 1];
-  }
-
-  return '';
-}
-
-function extractCommandFromFindExec(command: string): string {
-  const execPattern = /\s+-exec(?:dir)?\s+(\S+)/;
-  const match = command.match(execPattern);
-
-  if (match && match[1]) {
-    return match[1];
-  }
-
-  return '';
-}
-
-function isCommandInAllowlist(commandName: string, allowCommands: AllowCommand[]): boolean {
-  return allowCommands.some((cmd) => {
-    const cmdName = getCommandName(cmd);
-    return cmdName === commandName;
-  });
-}
 
 vi.mock('../config/config-loader.js', () => {
   const mockConfig = {
