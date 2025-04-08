@@ -186,7 +186,7 @@ describe('handleShellCommand', () => {
     // Verify custom error message is used
     expect(result.content[0].text).toContain('rm is dangerous, use trash-cli instead');
     // Verify command is included in error
-    expect(result.content[0].text).toContain('Command: rm -rf /');
+    expect(result.content[0].text).toContain('Blocked command: rm -rf /');
     // Verify the logger was called with the correct arguments
     expect(logSpy).toHaveBeenCalledWith(
       command,

@@ -12,6 +12,8 @@ export default defineConfig({
       ignoreSourceErrors: false,
       tsconfig: './tsconfig.json',
     },
-    env: {},
+    env: {
+      MCP_CONFIG_PATH: './mcp-config.sample.json',
+    },
   },
 });

@@ -50,12 +50,7 @@ export function loadConfig(): ShellCommandConfig {
 /**
  * 現在の設定を保持する変数
  */
-let currentConfig: ShellCommandConfig = {
-  allowedDirectories: [],
-  allowCommands: [],
-  denyCommands: [],
-  defaultErrorMessage: 'config not found',
-};
+let currentConfig: ShellCommandConfig | null = null;
 
 /**
  * 設定を再読み込みする関数
@@ -69,5 +64,6 @@ export function reloadConfig(): ShellCommandConfig {
  * 現在の設定を取得する関数
  */
 export function getConfig(): ShellCommandConfig {
+  currentConfig = currentConfig ?? loadConfig();
   return currentConfig;
 }

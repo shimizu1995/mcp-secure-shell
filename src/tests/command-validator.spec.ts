@@ -36,7 +36,6 @@ vi.mock('../config/config-loader.js', () => {
   };
   return {
     getConfig: vi.fn(() => mockConfig),
-    loadConfig: vi.fn(() => mockConfig),
     reloadConfig: vi.fn(() => mockConfig),
   };
 });
