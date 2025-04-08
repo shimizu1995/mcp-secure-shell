@@ -7,6 +7,37 @@ import {
   checkForOutputRedirection,
 } from '../command-validator.js';
 import * as configLoader from '../config/config-loader.js';
+import { AllowCommand } from '../config/shell-command-config.js';
+
+// Internal helper functions for tests
+function extractCommandFromXargs(command: string): string {
+  const parts = command.trim().split(/\s+/);
+  const xargsIndex = parts.findIndex((part) => part === 'xargs');
+
+  if (xargsIndex >= 0 && xargsIndex + 1 < parts.length) {
+    return parts[xargsIndex + 1];
+  }
+
+  return '';
+}
+
+function extractCommandFromFindExec(command: string): string {
+  const execPattern = /\s+-exec(?:dir)?\s+(\S+)/;
+  const match = command.match(execPattern);
+
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  return '';
+}
+
+function isCommandInAllowlist(commandName: string, allowCommands: AllowCommand[]): boolean {
+  return allowCommands.some((cmd) => {
+    const cmdName = getCommandName(cmd);
+    return cmdName === commandName;
+  });
+}
 
 vi.mock('../config/config-loader.js', () => {
   const mockConfig = {
@@ -213,9 +244,134 @@ describe('validateCommandWithArgs', () => {
     expect(validateCommandWithArgs('ls find').isValid).toBe(true);
     expect(validateCommandWithArgs('echo "Do not use rm"').isValid).toBe(true);
   });
+
+  it('should validate xargs commands are in the allowlist', () => {
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat', 'echo', 'xargs'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // 許可リストにあるコマンドはxargsで使用可能
+    expect(validateCommandWithArgs('xargs ls').isValid).toBe(true);
+    expect(validateCommandWithArgs('xargs cat').isValid).toBe(true);
+    expect(validateCommandWithArgs('xargs echo').isValid).toBe(true);
+
+    // 許可リストにないコマンドはxargsで使用不可
+    expect(validateCommandWithArgs('xargs cp').isValid).toBe(false);
+    expect(validateCommandWithArgs('xargs grep').isValid).toBe(false);
+    expect(validateCommandWithArgs('xargs mv').isValid).toBe(false);
+  });
 });
 
 // テストケースをvalidateCommandWithArgsとvalidateMultipleCommandsに統合
+
+describe('extractCommandFromXargs', () => {
+  it('should extract command name from xargs command string', () => {
+    expect(extractCommandFromXargs('xargs ls')).toBe('ls');
+    expect(extractCommandFromXargs('xargs cat')).toBe('cat');
+    expect(extractCommandFromXargs('xargs echo')).toBe('echo');
+    expect(extractCommandFromXargs('find . -name "*.txt" | xargs grep pattern')).toBe('grep');
+  });
+
+  it('should return empty string if no command is found after xargs', () => {
+    expect(extractCommandFromXargs('xargs')).toBe('');
+    expect(extractCommandFromXargs('command xargs')).toBe('');
+  });
+
+  it('should handle whitespace properly', () => {
+    expect(extractCommandFromXargs('xargs     ls')).toBe('ls');
+    expect(extractCommandFromXargs('  xargs  cat  ')).toBe('cat');
+  });
+});
+
+describe('extractCommandFromFindExec', () => {
+  it('should extract command name from find -exec option', () => {
+    expect(extractCommandFromFindExec('find . -exec ls {} ;')).toBe('ls');
+    expect(extractCommandFromFindExec('find . -name "*.txt" -exec cat {} ;')).toBe('cat');
+    expect(extractCommandFromFindExec('find . -type f -exec chmod 644 {} ;')).toBe('chmod');
+  });
+
+  it('should extract command name from find -execdir option', () => {
+    expect(extractCommandFromFindExec('find . -execdir ls {} ;')).toBe('ls');
+    expect(extractCommandFromFindExec('find . -name "*.txt" -execdir cat {} ;')).toBe('cat');
+  });
+
+  it('should return empty string if no -exec option is found', () => {
+    expect(extractCommandFromFindExec('find . -name "*.txt"')).toBe('');
+    expect(extractCommandFromFindExec('grep pattern file.txt')).toBe('');
+  });
+});
+
+describe('isCommandInAllowlist', () => {
+  it('should check if a command is in the allowlist', () => {
+    const allowCommands = [
+      'ls',
+      'cat',
+      'echo',
+      { command: 'git', subCommands: ['status', 'log'] },
+      { command: 'npm', denySubCommands: ['install', 'uninstall'] },
+    ];
+
+    expect(isCommandInAllowlist('ls', allowCommands)).toBe(true);
+    expect(isCommandInAllowlist('cat', allowCommands)).toBe(true);
+    expect(isCommandInAllowlist('echo', allowCommands)).toBe(true);
+    expect(isCommandInAllowlist('git', allowCommands)).toBe(true);
+    expect(isCommandInAllowlist('npm', allowCommands)).toBe(true);
+
+    expect(isCommandInAllowlist('rm', allowCommands)).toBe(false);
+    expect(isCommandInAllowlist('cp', allowCommands)).toBe(false);
+    expect(isCommandInAllowlist('sudo', allowCommands)).toBe(false);
+  });
+
+  it('should return false for empty allowlist', () => {
+    expect(isCommandInAllowlist('ls', [])).toBe(false);
+  });
+});
+
+describe('Complex cases with find and xargs', () => {
+  it('should handle complex commands with find -exec', () => {
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['find', 'ls', 'grep', 'cat', 'chmod', 'echo'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // 複雑なfind -execコマンド
+    expect(
+      validateCommandWithArgs('find . -type f -name "*.js" -exec grep "pattern" {} ;').isValid
+    ).toBe(true);
+    expect(
+      validateCommandWithArgs(
+        'find . -path "*/node_modules/*" -prune -o -name "*.ts" -exec cat {} ;'
+      ).isValid
+    ).toBe(true);
+
+    // 禁止コマンドを実行する場合
+    expect(validateCommandWithArgs('find . -type f -mtime +30 -exec rm {} ;').isValid).toBe(false);
+  });
+
+  it('should handle complex commands with xargs', () => {
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['find', 'ls', 'grep', 'cat', 'chmod', 'echo', 'xargs'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // 複雑なxargsコマンド
+    expect(validateCommandWithArgs('find . -name "*.txt" | xargs cat').isValid).toBe(true);
+    expect(validateCommandWithArgs('find . -name "*.log" | xargs grep "error"').isValid).toBe(true);
+
+    // 禁止コマンドを実行する場合
+    expect(validateCommandWithArgs('find . -type f -mtime +30 | xargs rm').isValid).toBe(false);
+  });
+});
 
 describe('getCommandName', () => {
   it('should extract command name from string', () => {

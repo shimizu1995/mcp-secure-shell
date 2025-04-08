@@ -102,6 +102,46 @@ export function validateCommandWithArgs(command: string): ValidationResult {
   }
 
   if (COMMANDS_THAT_EXECUTE_OTHER_COMMANDS.includes(baseCommand)) {
+    // 他のコマンドを実行するコマンド（xargsやfind）の場合、引数のコマンドをチェック
+    let extractedCommand = '';
+
+    if (baseCommand === 'xargs') {
+      extractedCommand = extractCommandFromXargs(command);
+    } else if (baseCommand === 'find' && command.includes('-exec')) {
+      extractedCommand = extractCommandFromFindExec(command);
+    }
+
+    if (extractedCommand) {
+      // ブラックリストチェック
+      const blacklistedCmd = config.denyCommands.find((denyCmd) => {
+        const cmdName = getDenyCommandName(denyCmd);
+        return cmdName === extractedCommand;
+      });
+
+      if (blacklistedCmd) {
+        return {
+          ...result,
+          message: getDenyCommandMessage(blacklistedCmd),
+          blockReason: {
+            denyCommand: blacklistedCmd,
+            location: 'validateCommandWithArgs:blacklistedCommandInExec',
+          },
+        };
+      }
+
+      // ホワイトリストチェック
+      if (!isCommandInAllowlist(extractedCommand, config.allowCommands)) {
+        return {
+          ...result,
+          message: `${config.defaultErrorMessage}: ${extractedCommand} (in ${baseCommand})`,
+          blockReason: {
+            location: 'validateCommandWithArgs:commandInExecNotInAllowlist',
+          },
+        };
+      }
+    }
+
+    // 従来のチェック - 引数に直接禁止コマンドが含まれていないか
     for (let i = 1; i < parts.length; i++) {
       const arg = parts[i];
       const blacklistedArg = config.denyCommands.find((denyCmd) => {
@@ -187,6 +227,53 @@ function getDenyCommandName(denyCmd: DenyCommand): string {
  * xargsや-execオプションを持つfindなど、引数として他のコマンドを実行するもの
  */
 const COMMANDS_THAT_EXECUTE_OTHER_COMMANDS = ['xargs', 'find'];
+
+/**
+ * xargsコマンドから実行されるコマンドを抽出する関数
+ * @param command xargsを含むコマンド文字列
+ * @returns 抽出されたコマンド名（見つからない場合は空文字列）
+ */
+export function extractCommandFromXargs(command: string): string {
+  // xargsの後の最初の引数がコマンドとみなされる
+  const parts = command.trim().split(/\s+/);
+  const xargsIndex = parts.findIndex((part) => part === 'xargs');
+
+  if (xargsIndex >= 0 && xargsIndex + 1 < parts.length) {
+    return parts[xargsIndex + 1];
+  }
+
+  return '';
+}
+
+/**
+ * find -exec/-execdir オプションから実行されるコマンドを抽出する関数
+ * @param command findコマンドを含む文字列
+ * @returns 抽出されたコマンド名（見つからない場合は空文字列）
+ */
+export function extractCommandFromFindExec(command: string): string {
+  // -exec または -execdir オプションを検索
+  const execPattern = /\s+-exec(?:dir)?\s+(\S+)/;
+  const match = command.match(execPattern);
+
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  return '';
+}
+
+/**
+ * コマンドが許可リストに含まれているか確認する関数
+ * @param commandName 確認するコマンド名
+ * @param allowCommands 許可コマンドリスト
+ * @returns 許可されているかどうかのブール値
+ */
+export function isCommandInAllowlist(commandName: string, allowCommands: AllowCommand[]): boolean {
+  return allowCommands.some((cmd) => {
+    const cmdName = getCommandName(cmd);
+    return cmdName === commandName;
+  });
+}
 
 /**
  * 複数のコマンドが組み合わされた文字列から個々のコマンドを抽出する
