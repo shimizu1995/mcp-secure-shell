@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { getConfig } from '../config/config-loader.js';
@@ -12,15 +12,35 @@ import {
 } from '../directory-manager.js';
 
 describe('Directory Management', () => {
-  // Real allowed directories pattern to test against
-  const homeDir = process.env.HOME || process.cwd();
-  const testDir = path.join(homeDir, 'test-dir');
-  const testFile = path.join(homeDir, 'test-file.txt');
+  // Use __dirname for test files and directories instead of home directory
+  const testBaseDir = path.join(__dirname, 'temp-test-dir');
+  const testDir = path.join(testBaseDir, 'test-dir');
+  const testFile = path.join(testBaseDir, 'test-file.txt');
+
+  // Clean up the test directories and files after all tests
+  afterAll(() => {
+    // Clean up test files and directories after tests
+    if (fs.existsSync(testFile)) {
+      fs.unlinkSync(testFile);
+    }
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(testBaseDir)) {
+      fs.rmSync(testBaseDir, { recursive: true, force: true });
+    }
+  });
 
   beforeEach(() => {
+    // Create test base directory if it doesn't exist
+    if (!fs.existsSync(testBaseDir)) {
+      fs.mkdirSync(testBaseDir, { recursive: true });
+    }
+
     // Set up allowed directories for testing
-    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', homeDir);
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', testBaseDir);
     refreshAllowedDirectories();
+
     // Create test directory and file if they don't exist
     if (!fs.existsSync(testDir)) {
       try {
@@ -30,8 +50,8 @@ describe('Directory Management', () => {
       }
     }
 
-    // Reset working directory to home directory
-    setWorkingDirectory(homeDir);
+    // Reset working directory to test base directory
+    setWorkingDirectory(testBaseDir);
 
     // Create test file if it doesn't exist
     if (!fs.existsSync(testFile)) {
@@ -44,11 +64,11 @@ describe('Directory Management', () => {
   });
 
   it('should validate if a directory is allowed', () => {
-    // Home directory and subdirectories should be allowed
-    expect(isDirectoryAllowed(homeDir)).toBe(true);
+    // Test base directory and subdirectories should be allowed
+    expect(isDirectoryAllowed(testBaseDir)).toBe(true);
     expect(isDirectoryAllowed(testDir)).toBe(true);
 
-    // Directories outside home should not be allowed
+    // Directories outside test base directory should not be allowed
     const outsideDir = path.join('/', 'tmp', 'test-outside');
     expect(isDirectoryAllowed(outsideDir)).toBe(false);
 
@@ -58,7 +78,7 @@ describe('Directory Management', () => {
     }
 
     // Non-existent directories should not be allowed
-    const nonExistentDir = path.join(homeDir, 'non-existent-dir-' + Date.now());
+    const nonExistentDir = path.join(testBaseDir, 'non-existent-dir-' + Date.now());
     expect(isDirectoryAllowed(nonExistentDir)).toBe(false);
   });
 
@@ -68,10 +88,10 @@ describe('Directory Management', () => {
     expect(result).toBe(testDir);
     expect(getWorkingDirectory()).toBe(testDir);
 
-    // Set back to home directory
-    const result2 = setWorkingDirectory(homeDir);
-    expect(result2).toBe(homeDir);
-    expect(getWorkingDirectory()).toBe(homeDir);
+    // Set back to test base directory
+    const result2 = setWorkingDirectory(testBaseDir);
+    expect(result2).toBe(testBaseDir);
+    expect(getWorkingDirectory()).toBe(testBaseDir);
   });
 
   it('should throw an error when setting an invalid directory', () => {
@@ -80,7 +100,7 @@ describe('Directory Management', () => {
     expect(() => setWorkingDirectory(outsideDir)).toThrow(/Directory not allowed/);
 
     // Try to set to a non-existent directory
-    const nonExistentDir = path.join(homeDir, 'non-existent-dir-' + Date.now());
+    const nonExistentDir = path.join(testBaseDir, 'non-existent-dir-' + Date.now());
     expect(() => setWorkingDirectory(nonExistentDir)).toThrow();
 
     // Try to set to a file (which is not a directory)
@@ -212,12 +232,27 @@ describe('parseAllowedDirectories', () => {
 });
 
 describe('handleShellCommand with Directory Parameter', () => {
-  const homeDir = process.env.HOME || process.cwd();
-  const testDir = path.join(homeDir, 'test-dir');
+  const testBaseDir = path.join(__dirname, 'temp-test-dir-2');
+  const testDir = path.join(testBaseDir, 'test-dir');
+
+  // Clean up the test directories and files after all tests
+  afterAll(() => {
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(testBaseDir)) {
+      fs.rmSync(testBaseDir, { recursive: true, force: true });
+    }
+  });
 
   beforeEach(() => {
+    // Create test base directory if it doesn't exist
+    if (!fs.existsSync(testBaseDir)) {
+      fs.mkdirSync(testBaseDir, { recursive: true });
+    }
+
     // Set up allowed directories for testing
-    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', homeDir);
+    vi.stubEnv('MCP_ALLOWED_DIRECTORIES', testBaseDir);
     refreshAllowedDirectories();
     // Create test directory if it doesn't exist
     if (!fs.existsSync(testDir)) {
@@ -228,8 +263,8 @@ describe('handleShellCommand with Directory Parameter', () => {
       }
     }
 
-    // Reset working directory to home directory
-    setWorkingDirectory(homeDir);
+    // Reset working directory to test base directory
+    setWorkingDirectory(testBaseDir);
   });
 
   it('should update working directory when directory parameter is used', () => {
@@ -237,8 +272,8 @@ describe('handleShellCommand with Directory Parameter', () => {
     setWorkingDirectory(testDir);
     expect(getWorkingDirectory()).toBe(testDir);
 
-    // Change back to home directory
-    setWorkingDirectory(homeDir);
-    expect(getWorkingDirectory()).toBe(homeDir);
+    // Change back to test base directory
+    setWorkingDirectory(testBaseDir);
+    expect(getWorkingDirectory()).toBe(testBaseDir);
   });
 });
