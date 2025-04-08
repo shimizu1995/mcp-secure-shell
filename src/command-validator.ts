@@ -1,5 +1,5 @@
 import { getConfig } from './config/config-loader.js';
-import { AllowCommand, DenyCommand } from './config/shell-command-config.js';
+import { AllowCommand, DenyCommand, ShellCommandConfig } from './config/shell-command-config.js';
 
 // シェル演算子の正規表現パターン
 const SHELL_OPERATORS_REGEX = /([;|&]|&&|\|\||\(|\)|\{|\})/g;
@@ -9,10 +9,6 @@ const OUTPUT_REDIRECTION_REGEX = /(\s+>>|\s+>)(?![^"']*["']\s*$)/g;
 
 // コマンド置換の正規表現パターン
 const COMMAND_SUBSTITUTION_REGEX = /\$\([^)]+\)/g;
-
-/**
- * コマンド文字列から基本コマンドを取得する
- */
 
 /**
  * コマンド文字列に出力リダイレクトが含まれているかチェックする
@@ -30,6 +26,7 @@ export function checkForOutputRedirection(commandString: string): string | null 
 
   return null;
 }
+
 export function getCommandName(
   commandStr: string | { command: string; subCommands?: string[] }
 ): string {
@@ -52,167 +49,16 @@ export type ValidationResult = {
 };
 
 /**
- * コマンドが許可リストに登録されているか検証する関数
- * サブコマンドも含めて検証、およびブラックリストの確認も行う
- * @param command コマンド文字列
- * @returns 許可されるかどうかのブール値
+ * コマンドが許可リストに含まれているか確認する関数
+ * @param commandName 確認するコマンド名
+ * @param allowCommands 許可コマンドリスト
+ * @returns 許可されているかどうかのブール値
  */
-export function validateCommandWithArgs(command: string): ValidationResult {
-  const config = getConfig();
-  const parts = command.trim().split(/\s+/);
-  const baseCommand = parts[0];
-
-  function getDenyCommandMessage(denyCommand: DenyCommand): string {
-    if (typeof denyCommand === 'object' && denyCommand.message) {
-      return denyCommand.message;
-    }
-    return config.defaultErrorMessage;
-  }
-
-  const result: ValidationResult = {
-    isValid: false,
-    command,
-    baseCommand,
-    message: '',
-    allowedCommands: config.allowCommands,
-  };
-
-  if (!baseCommand) {
-    return {
-      ...result,
-      message: 'empty command',
-      blockReason: { location: 'validateCommandWithArgs:emptyCommand' },
-    };
-  }
-
-  const blacklistedCmd = config.denyCommands.find((denyCmd) => {
-    const cmdName = getDenyCommandName(denyCmd);
-    return cmdName === baseCommand;
-  });
-
-  if (blacklistedCmd) {
-    return {
-      ...result,
-      message: getDenyCommandMessage(blacklistedCmd),
-      blockReason: {
-        denyCommand: blacklistedCmd,
-        location: 'validateCommandWithArgs:blacklistedBaseCommand',
-      },
-    };
-  }
-
-  if (COMMANDS_THAT_EXECUTE_OTHER_COMMANDS.includes(baseCommand)) {
-    // 他のコマンドを実行するコマンド（xargsやfind）の場合、引数のコマンドをチェック
-    let extractedCommand = '';
-
-    if (baseCommand === 'xargs') {
-      extractedCommand = extractCommandFromXargs(command);
-    } else if (baseCommand === 'find' && command.includes('-exec')) {
-      extractedCommand = extractCommandFromFindExec(command);
-    }
-
-    if (extractedCommand) {
-      // ブラックリストチェック
-      const blacklistedCmd = config.denyCommands.find((denyCmd) => {
-        const cmdName = getDenyCommandName(denyCmd);
-        return cmdName === extractedCommand;
-      });
-
-      if (blacklistedCmd) {
-        return {
-          ...result,
-          message: getDenyCommandMessage(blacklistedCmd),
-          blockReason: {
-            denyCommand: blacklistedCmd,
-            location: 'validateCommandWithArgs:blacklistedCommandInExec',
-          },
-        };
-      }
-
-      // ホワイトリストチェック
-      if (!isCommandInAllowlist(extractedCommand, config.allowCommands)) {
-        return {
-          ...result,
-          message: `${config.defaultErrorMessage}: ${extractedCommand} (in ${baseCommand})`,
-          blockReason: {
-            location: 'validateCommandWithArgs:commandInExecNotInAllowlist',
-          },
-        };
-      }
-    }
-
-    // 従来のチェック - 引数に直接禁止コマンドが含まれていないか
-    for (let i = 1; i < parts.length; i++) {
-      const arg = parts[i];
-      const blacklistedArg = config.denyCommands.find((denyCmd) => {
-        const cmdName = getDenyCommandName(denyCmd);
-        return cmdName === arg;
-      });
-      if (blacklistedArg) {
-        return {
-          ...result,
-          message: getDenyCommandMessage(blacklistedArg),
-          blockReason: {
-            denyCommand: blacklistedArg,
-            location: 'validateCommandWithArgs:blacklistedArgument',
-          },
-        };
-      }
-    }
-  }
-
-  const matchedCommand = config.allowCommands.find((cmd) => {
+export function isCommandInAllowlist(commandName: string, allowCommands: AllowCommand[]): boolean {
+  return allowCommands.some((cmd) => {
     const cmdName = getCommandName(cmd);
-    return cmdName === baseCommand;
+    return cmdName === commandName;
   });
-
-  if (matchedCommand === undefined) {
-    return {
-      ...result,
-      message: `${config.defaultErrorMessage}: ${baseCommand}`,
-      blockReason: {
-        location: 'validateCommandWithArgs:commandNotInAllowlist',
-      },
-    };
-  }
-
-  if (typeof matchedCommand === 'string') {
-    return { ...result, isValid: true, message: 'allowed command(string config)' };
-  }
-
-  if (parts.length > 1) {
-    const subCommand = parts[1];
-
-    if (matchedCommand.denySubCommands && matchedCommand.denySubCommands.includes(subCommand)) {
-      return {
-        ...result,
-        message: `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
-        blockReason: {
-          location: 'validateCommandWithArgs:deniedSubcommand',
-          denyCommand: { command: `${baseCommand} ${subCommand}` },
-        },
-      };
-    }
-
-    if (matchedCommand.subCommands) {
-      const isValid = matchedCommand.subCommands.includes(subCommand);
-      return {
-        ...result,
-        isValid,
-        message: isValid
-          ? 'allowed subcommand'
-          : `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
-        ...(!isValid && {
-          blockReason: {
-            location: 'validateCommandWithArgs:subcommandNotInAllowlist',
-            denyCommand: { command: `${baseCommand} ${subCommand}` },
-          },
-        }),
-      };
-    }
-  }
-
-  return { ...result, isValid: true, message: 'allowed command(object config)' };
 }
 
 /**
@@ -220,6 +66,16 @@ export function validateCommandWithArgs(command: string): ValidationResult {
  */
 function getDenyCommandName(denyCmd: DenyCommand): string {
   return typeof denyCmd === 'string' ? denyCmd : denyCmd.command;
+}
+
+/**
+ * DenyCommandからエラーメッセージを取得する関数
+ */
+function getDenyCommandMessage(denyCommand: DenyCommand, config: ShellCommandConfig): string {
+  if (typeof denyCommand === 'object' && denyCommand.message) {
+    return denyCommand.message;
+  }
+  return config.defaultErrorMessage;
 }
 
 /**
@@ -263,16 +119,173 @@ export function extractCommandFromFindExec(command: string): string {
 }
 
 /**
- * コマンドが許可リストに含まれているか確認する関数
- * @param commandName 確認するコマンド名
- * @param allowCommands 許可コマンドリスト
- * @returns 許可されているかどうかのブール値
+ * コマンド実行コマンド（xargs, find -execなど）の判定とコマンドの抽出
+ * @param baseCommand ベースコマンド
+ * @param command コマンド全体
+ * @param config 設定オブジェクト
+ * @param result 現在の結果オブジェクト
+ * @returns 検証結果、問題なければnull、問題あればValidationResult
  */
-export function isCommandInAllowlist(commandName: string, allowCommands: AllowCommand[]): boolean {
-  return allowCommands.some((cmd) => {
-    const cmdName = getCommandName(cmd);
-    return cmdName === commandName;
+function validateCommandExecCommand(
+  baseCommand: string,
+  command: string,
+  config: ShellCommandConfig,
+  result: ValidationResult
+): ValidationResult | null {
+  // 他のコマンドを実行するコマンド（xargsやfind）の場合、引数のコマンドをチェック
+  let extractedCommand = '';
+
+  if (baseCommand === 'xargs') {
+    extractedCommand = extractCommandFromXargs(command);
+  } else if (baseCommand === 'find' && command.includes('-exec')) {
+    extractedCommand = extractCommandFromFindExec(command);
+  }
+
+  if (extractedCommand) {
+    // ブラックリストチェック
+    const blacklistedCmd = config.denyCommands.find((denyCmd) => {
+      const cmdName = getDenyCommandName(denyCmd);
+      return cmdName === extractedCommand;
+    });
+
+    if (blacklistedCmd) {
+      return {
+        ...result,
+        message: getDenyCommandMessage(blacklistedCmd, config),
+        blockReason: {
+          denyCommand: blacklistedCmd,
+          location: 'validateCommandWithArgs:blacklistedCommandInExec',
+        },
+      };
+    }
+
+    // ホワイトリストチェック
+    if (!isCommandInAllowlist(extractedCommand, config.allowCommands)) {
+      return {
+        ...result,
+        message: `${config.defaultErrorMessage}: ${extractedCommand} (in ${baseCommand})`,
+        blockReason: {
+          location: 'validateCommandWithArgs:commandInExecNotInAllowlist',
+        },
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * コマンドが許可リストに登録されているか検証する関数
+ * サブコマンドも含めて検証、およびブラックリストの確認も行う
+ * @param command コマンド文字列
+ * @returns 許可されるかどうかのブール値
+ */
+export function validateCommandWithArgs(command: string): ValidationResult {
+  const config = getConfig();
+  const parts = command.trim().split(/\s+/);
+  const baseCommand = parts[0];
+
+  const result: ValidationResult = {
+    isValid: false,
+    command,
+    baseCommand,
+    message: '',
+    allowedCommands: config.allowCommands,
+  };
+
+  if (!baseCommand) {
+    return {
+      ...result,
+      message: 'empty command',
+      blockReason: { location: 'validateCommandWithArgs:emptyCommand' },
+    };
+  }
+
+  const blacklistedCmd = config.denyCommands.find((denyCmd) => {
+    const cmdName = getDenyCommandName(denyCmd);
+    return cmdName === baseCommand;
   });
+
+  if (blacklistedCmd) {
+    return {
+      ...result,
+      message: getDenyCommandMessage(blacklistedCmd, config),
+      blockReason: {
+        denyCommand: blacklistedCmd,
+        location: 'validateCommandWithArgs:blacklistedBaseCommand',
+      },
+    };
+  }
+
+  if (COMMANDS_THAT_EXECUTE_OTHER_COMMANDS.includes(baseCommand)) {
+    const execCommandResult = validateCommandExecCommand(baseCommand, command, config, result);
+    if (execCommandResult) {
+      return execCommandResult;
+    }
+  }
+
+  // 直接isCommandInAllowlistを使って許可リストチェックを行う
+  if (!isCommandInAllowlist(baseCommand, config.allowCommands)) {
+    return {
+      ...result,
+      message: `${config.defaultErrorMessage}: ${baseCommand}`,
+      blockReason: {
+        location: 'validateCommandWithArgs:commandNotInAllowlist',
+      },
+    };
+  }
+
+  // 後は特定の設定に基づいたサブコマンドのチェック
+  const matchedCommand = config.allowCommands.find((cmd) => {
+    const cmdName = getCommandName(cmd);
+    return cmdName === baseCommand;
+  });
+
+  // ここでmatchedCommandが必ず存在するはず、なければ先のisCommandInAllowlistでチェックされる
+  // しかしTypeScriptの型チェックのため、ここでガードする
+  if (!matchedCommand) {
+    return { ...result, isValid: true, message: 'allowed command' };
+  }
+
+  if (typeof matchedCommand === 'string') {
+    return { ...result, isValid: true, message: 'allowed command(string config)' };
+  }
+
+  if (parts.length > 1) {
+    const subCommand = parts[1];
+
+    if (matchedCommand && typeof matchedCommand !== 'string') {
+      if (matchedCommand.denySubCommands && matchedCommand.denySubCommands.includes(subCommand)) {
+        return {
+          ...result,
+          message: `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
+          blockReason: {
+            location: 'validateCommandWithArgs:deniedSubcommand',
+            denyCommand: { command: `${baseCommand} ${subCommand}` },
+          },
+        };
+      }
+
+      if (matchedCommand.subCommands) {
+        const isValid = matchedCommand.subCommands.includes(subCommand);
+        return {
+          ...result,
+          isValid,
+          message: isValid
+            ? 'allowed subcommand'
+            : `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
+          ...(!isValid && {
+            blockReason: {
+              location: 'validateCommandWithArgs:subcommandNotInAllowlist',
+              denyCommand: { command: `${baseCommand} ${subCommand}` },
+            },
+          }),
+        };
+      }
+    }
+  }
+
+  return { ...result, isValid: true, message: 'allowed command(object config)' };
 }
 
 /**

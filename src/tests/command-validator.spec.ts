@@ -369,7 +369,7 @@ describe('Complex cases with find and xargs', () => {
     expect(validateCommandWithArgs('find . -name "*.log" | xargs grep "error"').isValid).toBe(true);
 
     // 禁止コマンドを実行する場合
-    expect(validateCommandWithArgs('find . -type f -mtime +30 | xargs rm').isValid).toBe(false);
+    expect(validateMultipleCommands('find . -type f -mtime +30 | xargs rm').isValid).toBe(false);
   });
 });
 
