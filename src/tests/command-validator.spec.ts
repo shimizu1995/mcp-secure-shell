@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   validateCommandWithArgs,
-  getCommandName,
   extractCommands,
   validateMultipleCommands,
   checkForOutputRedirection,
@@ -213,25 +212,67 @@ describe('validateCommandWithArgs', () => {
     expect(validateCommandWithArgs('ls find').isValid).toBe(true);
     expect(validateCommandWithArgs('echo "Do not use rm"').isValid).toBe(true);
   });
+
+  it('should validate xargs commands are in the allowlist', () => {
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['ls', 'cat', 'echo', 'xargs'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
+
+    // 許可リストにあるコマンドはxargsで使用可能
+    expect(validateCommandWithArgs('xargs ls').isValid).toBe(true);
+    expect(validateCommandWithArgs('xargs cat').isValid).toBe(true);
+    expect(validateCommandWithArgs('xargs echo').isValid).toBe(true);
+
+    // 許可リストにないコマンドはxargsで使用不可
+    expect(validateCommandWithArgs('xargs cp').isValid).toBe(false);
+    expect(validateCommandWithArgs('xargs grep').isValid).toBe(false);
+    expect(validateCommandWithArgs('xargs mv').isValid).toBe(false);
+  });
 });
 
-// テストケースをvalidateCommandWithArgsとvalidateMultipleCommandsに統合
+describe('Complex cases with find and xargs', () => {
+  it('should handle complex commands with find -exec', () => {
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['find', 'ls', 'grep', 'cat', 'chmod', 'echo'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
 
-describe('getCommandName', () => {
-  it('should extract command name from string', () => {
-    expect(getCommandName('ls')).toBe('ls');
-    expect(getCommandName('git')).toBe('git');
-    expect(getCommandName('npm')).toBe('npm');
+    // 複雑なfind -execコマンド
+    expect(
+      validateCommandWithArgs('find . -type f -name "*.js" -exec grep "pattern" {} ;').isValid
+    ).toBe(true);
+    expect(
+      validateCommandWithArgs(
+        'find . -path "*/node_modules/*" -prune -o -name "*.ts" -exec cat {} ;'
+      ).isValid
+    ).toBe(true);
+
+    // 禁止コマンドを実行する場合
+    expect(validateCommandWithArgs('find . -type f -mtime +30 -exec rm {} ;').isValid).toBe(false);
   });
 
-  it('should extract command name from object with command property', () => {
-    expect(getCommandName({ command: 'git' })).toBe('git');
-    expect(getCommandName({ command: 'npm' })).toBe('npm');
-  });
+  it('should handle complex commands with xargs', () => {
+    const mockConfig = {
+      allowedDirectories: ['/', '/tmp'],
+      allowCommands: ['find', 'ls', 'grep', 'cat', 'chmod', 'echo', 'xargs'],
+      denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
+      defaultErrorMessage: 'Command not allowed',
+    };
+    vi.spyOn(configLoader, 'getConfig').mockReturnValue(mockConfig);
 
-  it('should extract command name from object with command and subCommands properties', () => {
-    expect(getCommandName({ command: 'git', subCommands: ['status', 'log'] })).toBe('git');
-    expect(getCommandName({ command: 'npm', subCommands: ['install', 'run'] })).toBe('npm');
+    // 複雑なxargsコマンド
+    expect(validateCommandWithArgs('find . -name "*.txt" | xargs cat').isValid).toBe(true);
+    expect(validateCommandWithArgs('find . -name "*.log" | xargs grep "error"').isValid).toBe(true);
+
+    // 禁止コマンドを実行する場合
+    expect(validateMultipleCommands('find . -type f -mtime +30 | xargs rm').isValid).toBe(false);
   });
 });
 
@@ -278,6 +319,22 @@ describe('extractCommands', () => {
     // コマンド置換は置換後の形式で返される
     expect(commands).toContain('echo __SUBST0__');
     expect(commands).toContain('date');
+    expect(commands.length).toBe(2); // 2つのコマンドを抽出
+  });
+
+  it('should extract commands from brace groups', () => {
+    const input = '{ ls -la; echo test; }';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls -la');
+    expect(commands).toContain('echo test');
+    expect(commands.length).toBe(2); // 2つのコマンドを抽出
+  });
+
+  it('should extract commands from parenthesis groups', () => {
+    const input = '(ls -la; echo test)';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls -la');
+    expect(commands).toContain('echo test');
     expect(commands.length).toBe(2); // 2つのコマンドを抽出
   });
 
