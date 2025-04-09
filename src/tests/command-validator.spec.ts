@@ -1,13 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   validateCommandWithArgs,
-  getCommandName,
   extractCommands,
   validateMultipleCommands,
   checkForOutputRedirection,
-  extractCommandFromXargs,
-  extractCommandFromFindExec,
-  findCommandInAllowlist,
 } from '../command-validator.js';
 import * as configLoader from '../config/config-loader.js';
 
@@ -238,77 +234,6 @@ describe('validateCommandWithArgs', () => {
   });
 });
 
-// テストケースをvalidateCommandWithArgsとvalidateMultipleCommandsに統合
-
-describe('extractCommandFromXargs', () => {
-  it('should extract command name from xargs command string', () => {
-    expect(extractCommandFromXargs('xargs ls')).toBe('ls');
-    expect(extractCommandFromXargs('xargs cat')).toBe('cat');
-    expect(extractCommandFromXargs('xargs echo')).toBe('echo');
-    expect(extractCommandFromXargs('find . -name "*.txt" | xargs grep pattern')).toBe('grep');
-  });
-
-  it('should return empty string if no command is found after xargs', () => {
-    expect(extractCommandFromXargs('xargs')).toBe('');
-    expect(extractCommandFromXargs('command xargs')).toBe('');
-  });
-
-  it('should handle whitespace properly', () => {
-    expect(extractCommandFromXargs('xargs     ls')).toBe('ls');
-    expect(extractCommandFromXargs('  xargs  cat  ')).toBe('cat');
-  });
-});
-
-describe('extractCommandFromFindExec', () => {
-  it('should extract command name from find -exec option', () => {
-    expect(extractCommandFromFindExec('find . -exec ls {} ;')).toBe('ls');
-    expect(extractCommandFromFindExec('find . -name "*.txt" -exec cat {} ;')).toBe('cat');
-    expect(extractCommandFromFindExec('find . -type f -exec chmod 644 {} ;')).toBe('chmod');
-  });
-
-  it('should extract command name from find -execdir option', () => {
-    expect(extractCommandFromFindExec('find . -execdir ls {} ;')).toBe('ls');
-    expect(extractCommandFromFindExec('find . -name "*.txt" -execdir cat {} ;')).toBe('cat');
-  });
-
-  it('should return empty string if no -exec option is found', () => {
-    expect(extractCommandFromFindExec('find . -name "*.txt"')).toBe('');
-    expect(extractCommandFromFindExec('grep pattern file.txt')).toBe('');
-  });
-});
-
-describe('findCommandInAllowlist', () => {
-  it('should return the matching command from the allowlist', () => {
-    const allowCommands = [
-      'ls',
-      'cat',
-      'echo',
-      { command: 'git', subCommands: ['status', 'log'] },
-      { command: 'npm', denySubCommands: ['install', 'uninstall'] },
-    ];
-
-    expect(findCommandInAllowlist('ls', allowCommands)).toBe('ls');
-    expect(findCommandInAllowlist('cat', allowCommands)).toBe('cat');
-    expect(findCommandInAllowlist('echo', allowCommands)).toBe('echo');
-    expect(findCommandInAllowlist('git', allowCommands)).toEqual({
-      command: 'git',
-      subCommands: ['status', 'log'],
-    });
-    expect(findCommandInAllowlist('npm', allowCommands)).toEqual({
-      command: 'npm',
-      denySubCommands: ['install', 'uninstall'],
-    });
-
-    expect(findCommandInAllowlist('rm', allowCommands)).toBeNull();
-    expect(findCommandInAllowlist('cp', allowCommands)).toBeNull();
-    expect(findCommandInAllowlist('sudo', allowCommands)).toBeNull();
-  });
-
-  it('should return null for empty allowlist', () => {
-    expect(findCommandInAllowlist('ls', [])).toBeNull();
-  });
-});
-
 describe('Complex cases with find and xargs', () => {
   it('should handle complex commands with find -exec', () => {
     const mockConfig = {
@@ -348,24 +273,6 @@ describe('Complex cases with find and xargs', () => {
 
     // 禁止コマンドを実行する場合
     expect(validateMultipleCommands('find . -type f -mtime +30 | xargs rm').isValid).toBe(false);
-  });
-});
-
-describe('getCommandName', () => {
-  it('should extract command name from string', () => {
-    expect(getCommandName('ls')).toBe('ls');
-    expect(getCommandName('git')).toBe('git');
-    expect(getCommandName('npm')).toBe('npm');
-  });
-
-  it('should extract command name from object with command property', () => {
-    expect(getCommandName({ command: 'git' })).toBe('git');
-    expect(getCommandName({ command: 'npm' })).toBe('npm');
-  });
-
-  it('should extract command name from object with command and subCommands properties', () => {
-    expect(getCommandName({ command: 'git', subCommands: ['status', 'log'] })).toBe('git');
-    expect(getCommandName({ command: 'npm', subCommands: ['install', 'run'] })).toBe('npm');
   });
 });
 
