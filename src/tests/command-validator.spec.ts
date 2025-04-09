@@ -7,7 +7,7 @@ import {
   checkForOutputRedirection,
   extractCommandFromXargs,
   extractCommandFromFindExec,
-  isCommandInAllowlist,
+  findCommandInAllowlist,
 } from '../command-validator.js';
 import * as configLoader from '../config/config-loader.js';
 
@@ -277,8 +277,8 @@ describe('extractCommandFromFindExec', () => {
   });
 });
 
-describe('isCommandInAllowlist', () => {
-  it('should check if a command is in the allowlist', () => {
+describe('findCommandInAllowlist', () => {
+  it('should return the matching command from the allowlist', () => {
     const allowCommands = [
       'ls',
       'cat',
@@ -287,19 +287,25 @@ describe('isCommandInAllowlist', () => {
       { command: 'npm', denySubCommands: ['install', 'uninstall'] },
     ];
 
-    expect(isCommandInAllowlist('ls', allowCommands)).toBe(true);
-    expect(isCommandInAllowlist('cat', allowCommands)).toBe(true);
-    expect(isCommandInAllowlist('echo', allowCommands)).toBe(true);
-    expect(isCommandInAllowlist('git', allowCommands)).toBe(true);
-    expect(isCommandInAllowlist('npm', allowCommands)).toBe(true);
+    expect(findCommandInAllowlist('ls', allowCommands)).toBe('ls');
+    expect(findCommandInAllowlist('cat', allowCommands)).toBe('cat');
+    expect(findCommandInAllowlist('echo', allowCommands)).toBe('echo');
+    expect(findCommandInAllowlist('git', allowCommands)).toEqual({
+      command: 'git',
+      subCommands: ['status', 'log'],
+    });
+    expect(findCommandInAllowlist('npm', allowCommands)).toEqual({
+      command: 'npm',
+      denySubCommands: ['install', 'uninstall'],
+    });
 
-    expect(isCommandInAllowlist('rm', allowCommands)).toBe(false);
-    expect(isCommandInAllowlist('cp', allowCommands)).toBe(false);
-    expect(isCommandInAllowlist('sudo', allowCommands)).toBe(false);
+    expect(findCommandInAllowlist('rm', allowCommands)).toBeNull();
+    expect(findCommandInAllowlist('cp', allowCommands)).toBeNull();
+    expect(findCommandInAllowlist('sudo', allowCommands)).toBeNull();
   });
 
-  it('should return false for empty allowlist', () => {
-    expect(isCommandInAllowlist('ls', [])).toBe(false);
+  it('should return null for empty allowlist', () => {
+    expect(findCommandInAllowlist('ls', [])).toBeNull();
   });
 });
 

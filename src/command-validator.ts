@@ -52,13 +52,18 @@ export type ValidationResult = {
  * コマンドが許可リストに含まれているか確認する関数
  * @param commandName 確認するコマンド名
  * @param allowCommands 許可コマンドリスト
- * @returns 許可されているかどうかのブール値
+ * @returns マッチした許可コマンド、見つからない場合はnull
  */
-export function isCommandInAllowlist(commandName: string, allowCommands: AllowCommand[]): boolean {
-  return allowCommands.some((cmd) => {
+export function findCommandInAllowlist(
+  commandName: string,
+  allowCommands: AllowCommand[]
+): AllowCommand | null {
+  const matchedCommand = allowCommands.find((cmd) => {
     const cmdName = getCommandName(cmd);
     return cmdName === commandName;
   });
+
+  return matchedCommand || null;
 }
 
 /**
@@ -160,7 +165,8 @@ function validateCommandExecCommand(
     }
 
     // ホワイトリストチェック
-    if (!isCommandInAllowlist(extractedCommand, config.allowCommands)) {
+    const matchedAllowCommand = findCommandInAllowlist(extractedCommand, config.allowCommands);
+    if (!matchedAllowCommand) {
       return {
         ...result,
         message: `${config.defaultErrorMessage}: ${extractedCommand} (in ${baseCommand})`,
@@ -224,8 +230,9 @@ export function validateCommandWithArgs(command: string): ValidationResult {
     }
   }
 
-  // 直接isCommandInAllowlistを使って許可リストチェックを行う
-  if (!isCommandInAllowlist(baseCommand, config.allowCommands)) {
+  // 直接findCommandInAllowlistを使って許可リストチェックを行う
+  const matchedCommand = findCommandInAllowlist(baseCommand, config.allowCommands);
+  if (!matchedCommand) {
     return {
       ...result,
       message: `${config.defaultErrorMessage}: ${baseCommand}`,
@@ -235,22 +242,11 @@ export function validateCommandWithArgs(command: string): ValidationResult {
     };
   }
 
-  // 後は特定の設定に基づいたサブコマンドのチェック
-  const matchedCommand = config.allowCommands.find((cmd) => {
-    const cmdName = getCommandName(cmd);
-    return cmdName === baseCommand;
-  });
-
-  // ここでmatchedCommandが必ず存在するはず、なければ先のisCommandInAllowlistでチェックされる
-  // しかしTypeScriptの型チェックのため、ここでガードする
-  if (!matchedCommand) {
-    return { ...result, isValid: true, message: 'allowed command' };
-  }
-
   if (typeof matchedCommand === 'string') {
     return { ...result, isValid: true, message: 'allowed command(string config)' };
   }
 
+  // 後は特定の設定に基づいたサブコマンドのチェック
   if (parts.length > 1) {
     const subCommand = parts[1];
 
