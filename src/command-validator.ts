@@ -36,8 +36,6 @@ export function checkForOutputRedirection(commandString: string): string | null 
   return null;
 }
 
-// getCommandName function moved to utils/command-utils.js
-
 export type ValidationResult = {
   isValid: boolean;
   message: string;
@@ -49,12 +47,6 @@ export type ValidationResult = {
     location: string;
   };
 };
-
-// findCommandInAllowlist function moved to utils/command-utils.js
-
-// getDenyCommandName and getDenyCommandMessage moved to appropriate utility files
-
-// Command validation functions and constants moved to command-exec-validator.js
 
 /**
  * コマンドが許可リストに登録されているか検証する関数
@@ -105,8 +97,6 @@ export function validateCommandWithArgs(command: string): ValidationResult {
     if (execCommandResult) {
       return execCommandResult;
     }
-
-    // Note: The old for loop that checked arguments has been removed as it's now handled by validateCommandExecCommand
   }
 
   // 直接findCommandInAllowlistを使って許可リストチェックを行う
@@ -129,34 +119,32 @@ export function validateCommandWithArgs(command: string): ValidationResult {
   if (parts.length > 1) {
     const subCommand = parts[1];
 
-    if (matchedCommand && typeof matchedCommand !== 'string') {
-      if (matchedCommand.denySubCommands && matchedCommand.denySubCommands.includes(subCommand)) {
-        return {
-          ...result,
-          message: `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
+    if (matchedCommand.denySubCommands && matchedCommand.denySubCommands.includes(subCommand)) {
+      return {
+        ...result,
+        message: `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
+        blockReason: {
+          location: 'validateCommandWithArgs:deniedSubcommand',
+          denyCommand: { command: `${baseCommand} ${subCommand}` },
+        },
+      };
+    }
+
+    if (matchedCommand.subCommands) {
+      const isValid = matchedCommand.subCommands.includes(subCommand);
+      return {
+        ...result,
+        isValid,
+        message: isValid
+          ? 'allowed subcommand'
+          : `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
+        ...(!isValid && {
           blockReason: {
-            location: 'validateCommandWithArgs:deniedSubcommand',
+            location: 'validateCommandWithArgs:subcommandNotInAllowlist',
             denyCommand: { command: `${baseCommand} ${subCommand}` },
           },
-        };
-      }
-
-      if (matchedCommand.subCommands) {
-        const isValid = matchedCommand.subCommands.includes(subCommand);
-        return {
-          ...result,
-          isValid,
-          message: isValid
-            ? 'allowed subcommand'
-            : `${config.defaultErrorMessage}: ${baseCommand} ${subCommand}`,
-          ...(!isValid && {
-            blockReason: {
-              location: 'validateCommandWithArgs:subcommandNotInAllowlist',
-              denyCommand: { command: `${baseCommand} ${subCommand}` },
-            },
-          }),
-        };
-      }
+        }),
+      };
     }
   }
 
@@ -260,17 +248,8 @@ export function validateMultipleCommands(commandString: string): ValidationResul
   // 個々のコマンドを抽出
   const commands = extractCommands(commandString);
 
-  // 特殊な判定が必要なコマンドを除外
-  const commandsToCheck = commands.filter((cmd) => {
-    // 中括弧{}()のケースは除外する
-    if (cmd.startsWith('{ ') || cmd.startsWith('(')) {
-      return false;
-    }
-    return true;
-  });
-
   // コマンドが空の場合は拒否
-  if (commandsToCheck.length === 0) {
+  if (commands.length === 0) {
     return {
       isValid: false,
       baseCommand: '',
@@ -284,7 +263,7 @@ export function validateMultipleCommands(commandString: string): ValidationResul
   }
 
   // 各コマンドが許可リストに含まれているか検証
-  for (const cmd of commandsToCheck) {
+  for (const cmd of commands) {
     // 各コマンドにもリダイレクトチェックを適用
     const cmdRedirectionError = checkForOutputRedirection(cmd);
     if (cmdRedirectionError) {
@@ -307,7 +286,7 @@ export function validateMultipleCommands(commandString: string): ValidationResul
   }
   return {
     isValid: true,
-    baseCommand: commandsToCheck[0],
+    baseCommand: commands[0],
     command: commandString,
     allowedCommands: config.allowCommands,
     message: 'all commands are allowed',

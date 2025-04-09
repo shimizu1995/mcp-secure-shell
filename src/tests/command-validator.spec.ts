@@ -322,6 +322,22 @@ describe('extractCommands', () => {
     expect(commands.length).toBe(2); // 2つのコマンドを抽出
   });
 
+  it('should extract commands from brace groups', () => {
+    const input = '{ ls -la; echo test; }';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls -la');
+    expect(commands).toContain('echo test');
+    expect(commands.length).toBe(2); // 2つのコマンドを抽出
+  });
+
+  it('should extract commands from parenthesis groups', () => {
+    const input = '(ls -la; echo test)';
+    const commands = extractCommands(input);
+    expect(commands).toContain('ls -la');
+    expect(commands).toContain('echo test');
+    expect(commands.length).toBe(2); // 2つのコマンドを抽出
+  });
+
   it('should extract commands from complex combinations', () => {
     const input = 'ls -la | grep .js && echo $(date) || echo "failed"';
     const commands = extractCommands(input);

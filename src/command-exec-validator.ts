@@ -46,8 +46,6 @@ export function extractCommandFromFindExec(command: string): string {
   return '';
 }
 
-// getDenyCommandMessage moved to utils/command-utils.js
-
 /**
  * コマンド実行コマンド（xargs, find -execなど）の判定とコマンドの抽出
  * @param baseCommand ベースコマンド
