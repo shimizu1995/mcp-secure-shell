@@ -159,6 +159,66 @@ export function extractCommands(commandString: string): string[] {
   // 結果のコマンドリスト
   const commands: string[] = [];
 
+  // find -exec コマンドの特別処理
+  const isFindExecCommand =
+    commandString.trim().startsWith('find') && commandString.includes('-exec');
+
+  // findコマンドとその後に続くコマンドの分割
+  if (isFindExecCommand) {
+    // &&や;で結合されたコマンドを分割
+    // ここでは\\;（エスケープされたセミコロン）と;（読みのセミコロン）を区別する
+    const parts = [];
+    let currentPart = '';
+    let i = 0;
+
+    // 文字ごとに処理して\;と通常の;を区別する
+    while (i < commandString.length) {
+      // 現在の文字と次の文字を取得
+      const currentChar = commandString[i];
+      const nextChar = i < commandString.length - 1 ? commandString[i + 1] : '';
+      const prev2Chars = i >= 2 ? commandString.substring(i - 2, i) : '';
+
+      // エスケープされたセミコロン\;の場合はそのまま追加
+      if (currentChar === ';' && prev2Chars.endsWith('\\')) {
+        currentPart += currentChar;
+      }
+      // &&演算子を検出した場合はコマンドを分割
+      else if (currentChar === '&' && nextChar === '&') {
+        if (currentPart.trim()) {
+          parts.push(currentPart.trim());
+        }
+        currentPart = '';
+        i++; // &&の2文字目をスキップ
+      }
+      // 通常のセミコロンの場合はコマンドを分割
+      else if (currentChar === ';' && !prev2Chars.endsWith('\\')) {
+        if (currentPart.trim()) {
+          parts.push(currentPart.trim());
+        }
+        currentPart = '';
+      }
+      // 通常の文字はそのまま追加
+      else {
+        currentPart += currentChar;
+      }
+
+      i++;
+    }
+
+    // 最後の部分を追加
+    if (currentPart.trim()) {
+      parts.push(currentPart.trim());
+    }
+
+    // 特別なケースを処理する
+    if (parts.length === 0 && commandString.trim()) {
+      // 分割できなかった場合は全体を一つのコマンドとして追加
+      return [commandString.trim()];
+    }
+
+    return parts;
+  }
+
   // 引用符内のコンテンツを一時的にプレースホルダーに置き換え
   let processedCommand = commandString;
   const quotedStrings: string[] = [];
@@ -175,6 +235,14 @@ export function extractCommands(commandString: string): string[] {
   processedCommand = processedCommand.replace(singleQuotePattern, (match) => {
     quotedStrings.push(match);
     return `__QUOTE${quotedStrings.length - 1}__`;
+  });
+
+  // エスケープされたセミコロンやその他の特殊文字をプレースホルダーに置き換え
+  const escapedCharPattern = /\\([;&|])/g;
+  const escapedChars: string[] = [];
+  processedCommand = processedCommand.replace(escapedCharPattern, (match) => {
+    escapedChars.push(match);
+    return `__ESCAPED${escapedChars.length - 1}__`;
   });
 
   // コマンド置換を検出して処理
@@ -196,11 +264,21 @@ export function extractCommands(commandString: string): string[] {
     processedCommand = processedCommand.replace(subst, `__SUBST${index}__`);
   });
 
-  // シェル演算子で分割
-  const parts = processedCommand
-    .split(SHELL_OPERATORS_REGEX)
-    .filter(Boolean)
-    .map((part) => part.trim());
+  // 基本的なシェル演算子でコマンドを分割
+  // -exec オプションと他のオプションを区別するために改良
+  let parts: string[] = [];
+
+  // 演算子で分割する前に、特定のパターン（find -exec など）を識別
+  if (processedCommand.includes('-exec') && processedCommand.trim().startsWith('find')) {
+    // find -exec コマンドが含まれている場合は単一コマンドとして扱う
+    parts = [processedCommand.trim()];
+  } else {
+    // 通常の分割処理
+    parts = processedCommand
+      .split(SHELL_OPERATORS_REGEX)
+      .filter(Boolean)
+      .map((part) => part.trim());
+  }
 
   // 演算子ではない部分（実際のコマンド）だけを取得
   const basicCommands = parts.filter((part) => {
@@ -208,17 +286,36 @@ export function extractCommands(commandString: string): string[] {
   });
 
   // 元のコマンド文字列のプレースホルダーを元に戻す
-  basicCommands.forEach((cmd, index) => {
+  const restoredCommands = basicCommands.map((cmd) => {
     let restoredCmd = cmd;
+
     // 引用符のプレースホルダーを元に戻す
     quotedStrings.forEach((quotedStr, idx) => {
-      restoredCmd = restoredCmd.replace(`__QUOTE${idx}__`, quotedStr);
+      const placeholder = `__QUOTE${idx}__`;
+      while (restoredCmd.includes(placeholder)) {
+        restoredCmd = restoredCmd.replace(placeholder, quotedStr);
+      }
     });
-    basicCommands[index] = restoredCmd;
+
+    // エスケープされた文字を元に戻す
+    escapedChars.forEach((escapedChar, idx) => {
+      const placeholder = `__ESCAPED${idx}__`;
+      while (restoredCmd.includes(placeholder)) {
+        restoredCmd = restoredCmd.replace(placeholder, escapedChar);
+      }
+    });
+
+    return restoredCmd;
   });
 
   // 分割されたコマンドを追加
-  commands.push(...basicCommands);
+  commands.push(...restoredCommands);
+
+  // 複合コマンドの特別なケースを処理
+  // シェル演算子が含まれないコマンドの場合、オリジナルのコマンドを確認
+  if (commands.length === 0 && commandString.trim() !== '') {
+    commands.push(commandString.trim());
+  }
 
   return commands.filter(Boolean);
 }
@@ -243,6 +340,24 @@ export function validateMultipleCommands(commandString: string): ValidationResul
         location: 'validateMultipleCommands:redirectionError',
       },
     };
+  }
+
+  // find -exec コマンドの特別処理
+  if (commandString.includes('-exec') && commandString.trim().startsWith('find')) {
+    // find -exec は許可するが、-exec オプション後のコマンドも確認する
+    const execCommandResult = validateCommandExecCommand('find', commandString, config, {
+      isValid: false,
+      command: commandString,
+      baseCommand: 'find',
+      message: '',
+      allowedCommands: config.allowCommands,
+    });
+
+    if (execCommandResult) {
+      return execCommandResult;
+    }
+
+    // 許可されている場合は先に進む
   }
 
   // 個々のコマンドを抽出
