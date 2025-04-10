@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import path from 'path';
 import {
   extractCommandFromXargs,
   extractCommandFromFindExec,
@@ -10,7 +11,7 @@ import { ValidationResult } from '../command-validator.js';
 
 vi.mock('../config/config-loader.js', () => {
   const mockConfig = {
-    allowedDirectories: ['/tmp', __dirname],
+    allowedDirectories: [path.join(__dirname, 'tmp'), __dirname],
     allowCommands: [
       'ls',
       'cat',
@@ -126,7 +127,7 @@ describe('validateCommandExecCommand', () => {
 
   it('should detect commands not in allowlist in exec', () => {
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat', 'echo', 'xargs', 'find'],
       denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
       defaultErrorMessage: 'Command not allowed',

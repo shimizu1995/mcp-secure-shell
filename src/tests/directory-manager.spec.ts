@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { getConfig } from '../config/config-loader.js';
 import {
   refreshAllowedDirectories,
@@ -68,7 +69,7 @@ describe('Directory Management', () => {
     expect(isDirectoryAllowed(testDir)).toBe(true);
 
     // Directories outside test base directory should not be allowed
-    const outsideDir = path.join('/', 'tmp', 'test-outside');
+    const outsideDir = path.join(os.tmpdir(), 'test-outside');
     expect(isDirectoryAllowed(outsideDir)).toBe(false);
 
     // Non-directories should not be allowed
@@ -95,7 +96,7 @@ describe('Directory Management', () => {
 
   it('should throw an error when setting an invalid directory', () => {
     // Try to set to a directory outside allowed directories
-    const outsideDir = path.join('/', 'tmp', 'test-outside');
+    const outsideDir = path.join(os.tmpdir(), 'test-outside');
     expect(() => setWorkingDirectory(outsideDir)).toThrow(/Directory not allowed/);
 
     // Try to set to a non-existent directory
@@ -118,15 +119,15 @@ describe('getAllowedDirectoriesFromConfig', () => {
   it('should return directories from config', () => {
     // Mock configuration
     vi.spyOn(getConfig(), 'allowedDirectories', 'get').mockReturnValue([
-      '/config/dir1',
-      '/config/dir2',
+      path.join(__dirname, 'config', 'dir1'),
+      path.join(__dirname, 'config', 'dir2'),
     ]);
 
     const result = getAllowedDirectoriesFromConfig();
 
     // Should include directories from config
-    expect(result).toContain('/config/dir1');
-    expect(result).toContain('/config/dir2');
+    expect(result).toContain(path.join(__dirname, 'config', 'dir1'));
+    expect(result).toContain(path.join(__dirname, 'config', 'dir2'));
     expect(result.length).toBe(2);
   });
 

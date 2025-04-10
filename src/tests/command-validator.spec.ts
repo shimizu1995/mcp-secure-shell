@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import path from 'path';
 import {
   validateCommandWithArgs,
   extractCommands,
@@ -9,7 +10,7 @@ import * as configLoader from '../config/config-loader.js';
 
 vi.mock('../config/config-loader.js', () => {
   const mockConfig = {
-    allowedDirectories: ['/tmp', __dirname],
+    allowedDirectories: [path.join(__dirname, 'tmp'), __dirname],
     allowCommands: [
       'ls',
       'cat',
@@ -114,7 +115,7 @@ describe('validateCommandWithArgs', () => {
   it('should handle special patterns for blacklisted commands', () => {
     // テスト用設定でrm、sudo、chmod、findがブラックリストに含まれていることを想定
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: [
         'ls',
         'cat',
@@ -170,7 +171,7 @@ describe('validateCommandWithArgs', () => {
   it('should reject blacklisted commands', () => {
     // テスト用設定でrmとsudoがブラックリストに含まれていることを想定
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat', 'git', 'echo'],
       denyCommands: [
         { command: 'rm', message: 'rm is dangerous' },
@@ -195,7 +196,7 @@ describe('validateCommandWithArgs', () => {
 
   it('should detect blacklisted commands in command execution arguments', () => {
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat', 'xargs', 'find', 'echo'],
       denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
       defaultErrorMessage: 'Command not allowed',
@@ -215,7 +216,7 @@ describe('validateCommandWithArgs', () => {
 
   it('should validate xargs commands are in the allowlist', () => {
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat', 'echo', 'xargs'],
       denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
       defaultErrorMessage: 'Command not allowed',
@@ -237,7 +238,7 @@ describe('validateCommandWithArgs', () => {
 describe('Complex cases with find and xargs', () => {
   it('should handle complex commands with find -exec', () => {
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['find', 'ls', 'grep', 'cat', 'chmod', 'echo'],
       denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
       defaultErrorMessage: 'Command not allowed',
@@ -260,7 +261,7 @@ describe('Complex cases with find and xargs', () => {
 
   it('should handle complex commands with xargs', () => {
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['find', 'ls', 'grep', 'cat', 'chmod', 'echo', 'xargs'],
       denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
       defaultErrorMessage: 'Command not allowed',
@@ -469,7 +470,7 @@ describe('validateMultipleCommands', () => {
   it('should return deny command info when blacklisted command is found', () => {
     // テスト用設定
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat', 'echo', 'grep', 'date'],
       denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
       defaultErrorMessage: 'Command not allowed',
@@ -518,7 +519,7 @@ describe('validateMultipleCommands', () => {
   it('should handle more complex pipe and combination cases', () => {
     // テスト用設定
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat', 'git', 'echo', 'grep', 'wc', 'xargs', 'date'],
       denyCommands: [
         { command: 'rm', message: 'rm is dangerous' },
@@ -556,7 +557,7 @@ describe('validateMultipleCommands', () => {
   it('should reject if command substitution contains disallowed commands', () => {
     // テスト用設定
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat', 'echo', 'grep', 'date', 'find', 'xargs'],
       denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
       defaultErrorMessage: 'Command not allowed',
@@ -576,7 +577,7 @@ describe('validateMultipleCommands', () => {
   it('should detect exec option in find command correctly', () => {
     // テスト用設定
     const mockConfig = {
-      allowedDirectories: ['/', '/tmp'],
+      allowedDirectories: [__dirname, path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat', 'echo', 'find', 'chmod'],
       denyCommands: [{ command: 'rm', message: 'rm is dangerous' }],
       defaultErrorMessage: 'Command not allowed',

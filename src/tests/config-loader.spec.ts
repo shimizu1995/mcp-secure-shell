@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import path from 'path';
 import * as configLoader from '../config/config-loader.js';
 import { CONFIG_NOT_FOUND_ERROR } from '../config/config-loader.js';
 import { ShellCommandConfig } from '../config/shell-command-config.js';
@@ -11,7 +12,7 @@ describe('Config Loader', () => {
 
   // テスト用の標準的な設定オブジェクト
   const mockConfig: ShellCommandConfig = {
-    allowedDirectories: ['/test-dir'],
+    allowedDirectories: [path.join(__dirname, 'test-dir')],
     allowCommands: ['ls', 'pwd', 'cd'],
     denyCommands: ['rm', 'sudo'],
     defaultErrorMessage: '許可されていないコマンドです。',
@@ -86,7 +87,7 @@ describe('Config Loader', () => {
     vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
       return JSON.stringify({
         // allowCommandsがない
-        allowedDirectories: ['/test-dir'],
+        allowedDirectories: [path.join(__dirname, 'test-dir')],
         denyCommands: ['rm', 'sudo'],
       });
     });
@@ -109,7 +110,7 @@ describe('Config Loader', () => {
     // 設定値が正しいか確認
     expect(config.allowCommands).toContain('ls');
     expect(config.denyCommands).toContain('rm');
-    expect(config.allowedDirectories).toContain('/test-dir');
+    expect(config.allowedDirectories).toContain(path.join(__dirname, 'test-dir'));
     expect(config.defaultErrorMessage).toBe('許可されていないコマンドです。');
   });
 

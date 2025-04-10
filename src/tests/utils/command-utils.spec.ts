@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import path from 'path';
 import {
   getCommandName,
   findCommandInAllowlist,
@@ -72,7 +73,7 @@ describe('getDenyCommandName', () => {
 describe('getDenyCommandMessage', () => {
   it('should return custom message from deny command object if available', () => {
     const config: ShellCommandConfig = {
-      allowedDirectories: ['/tmp'],
+      allowedDirectories: [path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat'],
       denyCommands: [],
       defaultErrorMessage: 'Command not allowed',
@@ -84,7 +85,7 @@ describe('getDenyCommandMessage', () => {
 
   it('should return default error message if deny command is string', () => {
     const config: ShellCommandConfig = {
-      allowedDirectories: ['/tmp'],
+      allowedDirectories: [path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat'],
       denyCommands: [],
       defaultErrorMessage: 'Command not allowed',
@@ -95,7 +96,7 @@ describe('getDenyCommandMessage', () => {
 
   it('should return default error message if deny command object has no message', () => {
     const config: ShellCommandConfig = {
-      allowedDirectories: ['/tmp'],
+      allowedDirectories: [path.join(__dirname, 'tmp')],
       allowCommands: ['ls', 'cat'],
       denyCommands: [],
       defaultErrorMessage: 'Command not allowed',
