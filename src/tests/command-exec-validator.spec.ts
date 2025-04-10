@@ -84,6 +84,17 @@ describe('extractCommandFromFindExec', () => {
     expect(extractCommandFromFindExec('find . -name "*.txt"')).toBe('');
     expect(extractCommandFromFindExec('grep pattern file.txt')).toBe('');
   });
+
+  it('should extract command name from find -exec with more complex commands', () => {
+    expect(
+      extractCommandFromFindExec(
+        'find . -name "*.spec.ts" -exec grep -l "allowedDirectories" {} \\;'
+      )
+    ).toBe('grep');
+    expect(extractCommandFromFindExec('find . -type f -name "*.js" -exec node {} \\;')).toBe(
+      'node'
+    );
+  });
 });
 
 describe('validateCommandExecCommand', () => {

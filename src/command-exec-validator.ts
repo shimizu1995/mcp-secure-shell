@@ -36,7 +36,9 @@ export function extractCommandFromXargs(command: string): string {
  */
 export function extractCommandFromFindExec(command: string): string {
   // -exec または -execdir オプションを検索
-  const execPattern = /\s+-exec(?:dir)?\s+(\S+)/;
+  // 正規表現を改善: -exec の後に来る実行コマンドを正確に抽出
+  // -exec の後のパターンを検出し、最初の非空白文字列をコマンドとして抽出
+  const execPattern = /\s+-exec(?:dir)?\s+([^\s;\\]+)/;
   const match = command.match(execPattern);
 
   if (match && match[1]) {
