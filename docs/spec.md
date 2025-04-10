@@ -29,9 +29,9 @@
 │   │   ├── logger.spec.ts
 │   │   ├── shell-command-handler.spec.ts
 │   │   └── utils
-│   │       └── command-utils.spec.ts
+│   │   └── command-utils.spec.ts
 │   └── utils
-│       └── command-utils.ts
+│   └── command-utils.ts
 ├── tsconfig.json
 ├── tsconfig.spec.json
 └── vitest.config.ts

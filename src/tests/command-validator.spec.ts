@@ -381,6 +381,67 @@ describe('extractCommands', () => {
     expect(commands).toContain('echo test');
     expect(commands.length).toBe(2); // 2つのコマンドを抽出
   });
+
+  it('should handle find -exec commands', () => {
+    const input = 'find . -name "*.spec.ts" -exec grep -l "allowedDirectories" {} \\;';
+    const commands = extractCommands(input);
+    expect(commands).toContain(input);
+    expect(commands.length).toBe(1); // 1つのコマンドを抽出
+  });
+
+  it('should handle multiple complex find -exec patterns', () => {
+    // 単一の find -exec コマンド
+    const input1 = 'find . -type f -name "*.js" -exec grep -l "console.log" {} \\;';
+    expect(extractCommands(input1)).toContain(input1);
+
+    // 単一の find -execdir コマンド
+    const input2 = 'find . -type f -name "*.ts" -execdir cat {} \\;';
+    expect(extractCommands(input2)).toContain(input2);
+
+    // 複数の引数を持つ grep コマンドを実行する find
+    const input3 = 'find . -name "*.js" -exec grep -l -i "ERROR" {} \\;';
+    expect(extractCommands(input3)).toContain(input3);
+  });
+
+  it('should handle find -exec with complex patterns and quotes', () => {
+    const input =
+      'find . -path "*/node_modules/*" -prune -o -name "*.ts" -exec grep -l "export function" {} \\;';
+    expect(extractCommands(input)).toContain(input);
+
+    const inputWithSingleQuotes = "find . -name '*.js' -exec grep -l 'function' {} \\;";
+    expect(extractCommands(inputWithSingleQuotes)).toContain(inputWithSingleQuotes);
+  });
+
+  it('should handle escaped characters in commands', () => {
+    const input = 'echo "This is a test\\; with escaped semicolon"';
+    expect(extractCommands(input)).toEqual([input]);
+
+    const inputWithEscapedPipe = 'echo "Testing escaped pipe \\| character"';
+    expect(extractCommands(inputWithEscapedPipe)).toEqual([inputWithEscapedPipe]);
+  });
+
+  it('should handle find -exec with multiple commands', () => {
+    const input = 'find . -name "*.js" -exec grep -l "test" {} \\; && echo "Done"';
+    const commands = extractCommands(input);
+    expect(commands).toContain('find . -name "*.js" -exec grep -l "test" {} \\;');
+    expect(commands).toContain('echo "Done"');
+    expect(commands.length).toBe(2);
+  });
+
+  it('should correctly extract commands with complex quoting and escaping', () => {
+    // 複雑な引用とエスケープが含まれるコマンド
+    const complexCommand = 'find . -name "*.json" -exec grep -l "key":"value" {} \\;';
+    expect(extractCommands(complexCommand)).toContain(complexCommand);
+  });
+
+  it('should handle commands with escaped shell operators', () => {
+    // エスケープされたシェル演算子を含むコマンド
+    const command1 = 'echo "This \\&\\& that"';
+    expect(extractCommands(command1)).toEqual([command1]);
+
+    const command2 = 'echo "value1 \\| value2"';
+    expect(extractCommands(command2)).toEqual([command2]);
+  });
 });
 
 describe('OUTPUT_REDIRECTION_REGEX', () => {
