@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   extractCommandFromXargs,
-  extractCommandFromFindExec,
   validateCommandExecCommand,
   COMMANDS_THAT_EXECUTE_OTHER_COMMANDS,
 } from '../command-exec-validator.js';
+import { extractCommandFromFindExec } from '../find-exec-validator.js';
 import * as configLoader from '../config/config-loader.js';
 import { ValidationResult } from '../command-validator.js';
 

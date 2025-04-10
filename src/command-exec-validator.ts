@@ -5,6 +5,7 @@ import {
   getDenyCommandMessage,
 } from './utils/command-utils.js';
 import { ValidationResult } from './command-validator.js';
+import { validateFindExecCommand } from './find-exec-validator.js';
 
 /**
  * コマンド導入コマンドのリスト
@@ -30,25 +31,6 @@ export function extractCommandFromXargs(command: string): string {
 }
 
 /**
- * find -exec/-execdir オプションから実行されるコマンドを抽出する関数
- * @param command findコマンドを含む文字列
- * @returns 抽出されたコマンド名（見つからない場合は空文字列）
- */
-export function extractCommandFromFindExec(command: string): string {
-  // -exec または -execdir オプションを検索
-  // 正規表現を改善: -exec の後に来る実行コマンドを正確に抽出
-  // -exec の後のパターンを検出し、最初の非空白文字列をコマンドとして抽出
-  const execPattern = /\s+-exec(?:dir)?\s+([^\s;\\]+)/;
-  const match = command.match(execPattern);
-
-  if (match && match[1]) {
-    return match[1];
-  }
-
-  return '';
-}
-
-/**
  * コマンド実行コマンド（xargs, find -execなど）の判定とコマンドの抽出
  * @param baseCommand ベースコマンド
  * @param command コマンド全体
@@ -68,7 +50,8 @@ export function validateCommandExecCommand(
   if (baseCommand === 'xargs') {
     extractedCommand = extractCommandFromXargs(command);
   } else if (baseCommand === 'find' && command.includes('-exec')) {
-    extractedCommand = extractCommandFromFindExec(command);
+    // find -exec の場合は専用の関数に委任
+    return validateFindExecCommand(command, config, result);
   }
 
   if (extractedCommand) {

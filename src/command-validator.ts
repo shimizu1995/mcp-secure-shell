@@ -9,6 +9,11 @@ import {
   COMMANDS_THAT_EXECUTE_OTHER_COMMANDS,
   validateCommandExecCommand,
 } from './command-exec-validator.js';
+import {
+  isFindExecCommand,
+  processFindExecCommand,
+  validateFindExecCommand,
+} from './find-exec-validator.js';
 
 // シェル演算子の正規表現パターン
 const SHELL_OPERATORS_REGEX = /([;|&]|&&|\|\||\(|\)|\{|\})/g;
@@ -159,6 +164,12 @@ export function extractCommands(commandString: string): string[] {
   // 結果のコマンドリスト
   const commands: string[] = [];
 
+  // find -exec コマンドの特別処理
+  if (isFindExecCommand(commandString)) {
+    // find-exec-validator から特別な処理を使用
+    return processFindExecCommand(commandString);
+  }
+
   // 引用符内のコンテンツを一時的にプレースホルダーに置き換え
   let processedCommand = commandString;
   const quotedStrings: string[] = [];
@@ -175,6 +186,14 @@ export function extractCommands(commandString: string): string[] {
   processedCommand = processedCommand.replace(singleQuotePattern, (match) => {
     quotedStrings.push(match);
     return `__QUOTE${quotedStrings.length - 1}__`;
+  });
+
+  // エスケープされたセミコロンやその他の特殊文字をプレースホルダーに置き換え
+  const escapedCharPattern = /\\([;&|])/g;
+  const escapedChars: string[] = [];
+  processedCommand = processedCommand.replace(escapedCharPattern, (match) => {
+    escapedChars.push(match);
+    return `__ESCAPED${escapedChars.length - 1}__`;
   });
 
   // コマンド置換を検出して処理
@@ -196,11 +215,21 @@ export function extractCommands(commandString: string): string[] {
     processedCommand = processedCommand.replace(subst, `__SUBST${index}__`);
   });
 
-  // シェル演算子で分割
-  const parts = processedCommand
-    .split(SHELL_OPERATORS_REGEX)
-    .filter(Boolean)
-    .map((part) => part.trim());
+  // 基本的なシェル演算子でコマンドを分割
+  // -exec オプションと他のオプションを区別するために改良
+  let parts: string[] = [];
+
+  // 演算子で分割する前に、特定のパターン（find -exec など）を識別
+  if (processedCommand.includes('-exec') && processedCommand.trim().startsWith('find')) {
+    // find -exec コマンドが含まれている場合は単一コマンドとして扱う
+    parts = [processedCommand.trim()];
+  } else {
+    // 通常の分割処理
+    parts = processedCommand
+      .split(SHELL_OPERATORS_REGEX)
+      .filter(Boolean)
+      .map((part) => part.trim());
+  }
 
   // 演算子ではない部分（実際のコマンド）だけを取得
   const basicCommands = parts.filter((part) => {
@@ -208,17 +237,36 @@ export function extractCommands(commandString: string): string[] {
   });
 
   // 元のコマンド文字列のプレースホルダーを元に戻す
-  basicCommands.forEach((cmd, index) => {
+  const restoredCommands = basicCommands.map((cmd) => {
     let restoredCmd = cmd;
+
     // 引用符のプレースホルダーを元に戻す
     quotedStrings.forEach((quotedStr, idx) => {
-      restoredCmd = restoredCmd.replace(`__QUOTE${idx}__`, quotedStr);
+      const placeholder = `__QUOTE${idx}__`;
+      while (restoredCmd.includes(placeholder)) {
+        restoredCmd = restoredCmd.replace(placeholder, quotedStr);
+      }
     });
-    basicCommands[index] = restoredCmd;
+
+    // エスケープされた文字を元に戻す
+    escapedChars.forEach((escapedChar, idx) => {
+      const placeholder = `__ESCAPED${idx}__`;
+      while (restoredCmd.includes(placeholder)) {
+        restoredCmd = restoredCmd.replace(placeholder, escapedChar);
+      }
+    });
+
+    return restoredCmd;
   });
 
   // 分割されたコマンドを追加
-  commands.push(...basicCommands);
+  commands.push(...restoredCommands);
+
+  // 複合コマンドの特別なケースを処理
+  // シェル演算子が含まれないコマンドの場合、オリジナルのコマンドを確認
+  if (commands.length === 0 && commandString.trim() !== '') {
+    commands.push(commandString.trim());
+  }
 
   return commands.filter(Boolean);
 }
@@ -243,6 +291,24 @@ export function validateMultipleCommands(commandString: string): ValidationResul
         location: 'validateMultipleCommands:redirectionError',
       },
     };
+  }
+
+  // find -exec コマンドの特別処理
+  if (isFindExecCommand(commandString)) {
+    // find -exec は許可するが、-exec オプション後のコマンドも確認する
+    const execCommandResult = validateFindExecCommand(commandString, config, {
+      isValid: false,
+      command: commandString,
+      baseCommand: 'find',
+      message: '',
+      allowedCommands: config.allowCommands,
+    });
+
+    if (execCommandResult) {
+      return execCommandResult;
+    }
+
+    // 許可されている場合は先に進む
   }
 
   // 個々のコマンドを抽出
